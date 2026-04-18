@@ -1,0 +1,7 @@
+{
+  "buildCommand": "cd neosynth && npm install && npm run build",
+  "outputDirectory": "neosynth/dist/public",
+  "framework": "vite",
+  "devCommand": "cd neosynth && npm run dev",
+  "installCommand": "npm install"
+}
