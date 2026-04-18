@@ -8,19 +8,23 @@ import {
   RATE_PRESETS,
   PATTERN_INFO,
   CARRIER_INFO,
+  BUNDLED_SAMPLES,
+  SESSION_PRESETS,
 } from "@/lib/stores/params";
 import type { BilateralPattern, CarrierType } from "@/lib/audio/AudioEngine";
 import { encodeWav, downloadBlob } from "@/lib/utils/wavExport";
 import { ChevronDown, ChevronUp, Play, Square, Download, Upload } from "lucide-react";
 
 export function NeoSynth() {
-  const { params, updateParam, exportParams, updateExportParam, activePreset, applyRatePreset } = useSynthParams();
+  const { params, updateParam, exportParams, updateExportParam, activePreset, applyRatePreset, activeSessionPreset, applySessionPreset } = useSynthParams();
   const [isPlaying, setIsPlaying] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState("");
   const [userFileName, setUserFileName] = useState<string | null>(null);
   const [showSafety, setShowSafety] = useState(false);
   const [showEducation, setShowEducation] = useState(false);
+  const [showSamples, setShowSamples] = useState(false);
+  const [showSessionPresets, setShowSessionPresets] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -64,6 +68,23 @@ export function NeoSynth() {
     await audioEngine.setUserAudio(file);
   }, []);
 
+  const handleSampleSelect = useCallback(async (path: string, layer: "A" | "B") => {
+    if (layer === "A") {
+      updateParam("carrierType", "sample");
+      updateParam("sampleUrl", path);
+    } else {
+      updateParam("layerBCarrierType", "sample");
+      updateParam("layerBSampleUrl", path);
+    }
+    if (isPlaying) {
+      await audioEngine.loadSampleUrl(path, layer);
+    }
+  }, [isPlaying, updateParam]);
+
+  const handlePreviewSample = useCallback(async (path: string) => {
+    await audioEngine.previewSample(path);
+  }, []);
+
   const DURATION_OPTIONS = [
     { label: "30s", value: 30 },
     { label: "1 min", value: 60 },
@@ -75,6 +96,8 @@ export function NeoSynth() {
   const showAsymmetric = params.pattern === "asymmetric";
   const showClustered = params.pattern === "clustered";
   const showRandomized = params.pattern === "randomized";
+  const showSineFreq = (params.carrierType === "sine" || params.carrierType === "band-limited") && params.carrierType !== "sample";
+  const showLayerBSineFreq = (params.layerBCarrierType === "sine" || params.layerBCarrierType === "band-limited") && params.layerBCarrierType !== "sample";
 
   return (
     <div className="flex flex-col min-h-screen" style={{ background: "#06070b", fontFamily: "'JetBrains Mono', monospace" }}>
@@ -121,6 +144,42 @@ export function NeoSynth() {
           }}
           data-testid="left-panel"
         >
+          {/* Session Presets */}
+          <Section label="SESSION PRESETS">
+            <button
+              onClick={() => setShowSessionPresets(!showSessionPresets)}
+              className="w-full text-left px-2 py-1.5 rounded text-xs transition-all"
+              style={{
+                background: showSessionPresets ? "rgba(34,211,238,0.1)" : "transparent",
+                border: `1px solid ${showSessionPresets ? "rgba(34,211,238,0.4)" : "rgba(255,255,255,0.06)"}`,
+                color: showSessionPresets ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.65)",
+              }}
+            >
+              {activeSessionPreset ? SESSION_PRESETS.find(p => p.name === activeSessionPreset)?.label || "Browse" : "Browse"}
+            </button>
+            {showSessionPresets && (
+              <div className="flex flex-col gap-1 mt-2 max-h-40 overflow-y-auto">
+                {SESSION_PRESETS.map((preset) => (
+                  <button
+                    key={preset.name}
+                    onClick={() => {
+                      applySessionPreset(preset);
+                      setShowSessionPresets(false);
+                    }}
+                    className="text-left px-2 py-1 rounded text-xs transition-all"
+                    style={{
+                      background: activeSessionPreset === preset.name ? "rgba(34,211,238,0.15)" : "transparent",
+                      border: `1px solid ${activeSessionPreset === preset.name ? "rgba(34,211,238,0.35)" : "rgba(255,255,255,0.05)"}`,
+                      color: activeSessionPreset === preset.name ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.5)",
+                    }}
+                  >
+                    <div className="text-xs" style={{ fontSize: 9 }}>{preset.label}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </Section>
+
           {/* Pattern */}
           <Section label="PATTERN">
             <div className="flex flex-col gap-1">
@@ -190,43 +249,6 @@ export function NeoSynth() {
               className="mt-1"
             />
           </Section>
-
-          {/* Carrier */}
-          <Section label="CARRIER">
-            <div className="flex flex-col gap-1">
-              {(Object.keys(CARRIER_INFO) as CarrierType[]).map((c) => (
-                <button
-                  key={c}
-                  data-testid={`carrier-${c}`}
-                  onClick={() => updateParam("carrierType", c)}
-                  className="text-left px-2 py-1.5 rounded transition-all"
-                  style={{
-                    background: params.carrierType === c ? "rgba(34,211,238,0.1)" : "transparent",
-                    border: `1px solid ${params.carrierType === c ? "rgba(34,211,238,0.4)" : "rgba(255,255,255,0.06)"}`,
-                  }}
-                >
-                  <div className="text-xs" style={{ color: params.carrierType === c ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.65)" }}>
-                    {CARRIER_INFO[c].label}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </Section>
-
-          {/* Carrier Frequency */}
-          {(params.carrierType === "sine" || params.carrierType === "band-limited") && (
-            <Section label={`FREQ — ${params.carrierFrequency} HZ`}>
-              <Slider
-                min={20}
-                max={800}
-                step={1}
-                value={[params.carrierFrequency]}
-                onValueChange={([v]) => updateParam("carrierFrequency", v)}
-                data-testid="slider-carrier-freq"
-                className="mt-1"
-              />
-            </Section>
-          )}
         </aside>
 
         {/* CENTER COLUMN — Bilateral Field + Transport */}
@@ -316,7 +338,7 @@ export function NeoSynth() {
           </div>
         </main>
 
-        {/* RIGHT COLUMN — Envelope, Gains, Options, Export */}
+        {/* RIGHT COLUMN — Carriers, Envelope, Export */}
         <aside
           className="flex flex-col gap-4 p-4 overflow-y-auto shrink-0"
           style={{
@@ -326,6 +348,125 @@ export function NeoSynth() {
           }}
           data-testid="right-panel"
         >
+          {/* Layer A Carrier */}
+          <Section label="LAYER A CARRIER">
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-1">
+                {(Object.keys(CARRIER_INFO) as CarrierType[]).map((c) => (
+                  <button
+                    key={c}
+                    data-testid={`carrier-${c}`}
+                    onClick={() => updateParam("carrierType", c)}
+                    className="text-left px-2 py-1.5 rounded transition-all"
+                    style={{
+                      background: params.carrierType === c ? "rgba(34,211,238,0.1)" : "transparent",
+                      border: `1px solid ${params.carrierType === c ? "rgba(34,211,238,0.4)" : "rgba(255,255,255,0.06)"}`,
+                    }}
+                  >
+                    <div className="text-xs" style={{ color: params.carrierType === c ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.65)", fontSize: 10 }}>
+                      {CARRIER_INFO[c].label}
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              {showSineFreq && (
+                <SliderRow
+                  label={`FREQ`}
+                  value={params.carrierFrequency}
+                  display={`${params.carrierFrequency} Hz`}
+                  min={20} max={800} step={1}
+                  onChange={(v) => updateParam("carrierFrequency", v)}
+                  testId="slider-carrier-freq"
+                />
+              )}
+
+              {params.carrierType === "sample" && (
+                <SamplePicker
+                  label="SELECT SAMPLE"
+                  selectedUrl={params.sampleUrl}
+                  onSelect={(path) => handleSampleSelect(path, "A")}
+                  onPreview={handlePreviewSample}
+                />
+              )}
+
+              <SliderRow
+                label="GAIN"
+                value={params.layerAGain}
+                display={`${Math.round(params.layerAGain * 100)}`}
+                min={0} max={1} step={0.01}
+                onChange={(v) => updateParam("layerAGain", v)}
+                testId="slider-layer-a-gain"
+              />
+            </div>
+          </Section>
+
+          {/* Layer B Toggle */}
+          <Section label="LAYER B">
+            <button
+              onClick={() => updateParam("layerBEnabled", !params.layerBEnabled)}
+              className="w-full px-2 py-1.5 rounded text-xs transition-all"
+              style={{
+                background: params.layerBEnabled ? "rgba(34,211,238,0.1)" : "transparent",
+                border: `1px solid ${params.layerBEnabled ? "rgba(34,211,238,0.4)" : "rgba(255,255,255,0.06)"}`,
+                color: params.layerBEnabled ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.45)",
+              }}
+            >
+              {params.layerBEnabled ? "ENABLED" : "DISABLED"}
+            </button>
+
+            {params.layerBEnabled && (
+              <div className="flex flex-col gap-2 mt-2">
+                <div className="flex flex-col gap-1">
+                  {(Object.keys(CARRIER_INFO) as CarrierType[]).map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => updateParam("layerBCarrierType", c)}
+                      className="text-left px-2 py-1.5 rounded transition-all"
+                      style={{
+                        background: params.layerBCarrierType === c ? "rgba(34,211,238,0.1)" : "transparent",
+                        border: `1px solid ${params.layerBCarrierType === c ? "rgba(34,211,238,0.4)" : "rgba(255,255,255,0.06)"}`,
+                      }}
+                    >
+                      <div className="text-xs" style={{ color: params.layerBCarrierType === c ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.65)", fontSize: 10 }}>
+                        {CARRIER_INFO[c].label}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                {showLayerBSineFreq && (
+                  <SliderRow
+                    label={`FREQ`}
+                    value={params.layerBCarrierFrequency}
+                    display={`${params.layerBCarrierFrequency} Hz`}
+                    min={20} max={800} step={1}
+                    onChange={(v) => updateParam("layerBCarrierFrequency", v)}
+                    testId="slider-layer-b-freq"
+                  />
+                )}
+
+                {params.layerBCarrierType === "sample" && (
+                  <SamplePicker
+                    label="SELECT SAMPLE"
+                    selectedUrl={params.layerBSampleUrl}
+                    onSelect={(path) => handleSampleSelect(path, "B")}
+                    onPreview={handlePreviewSample}
+                  />
+                )}
+
+                <SliderRow
+                  label="GAIN"
+                  value={params.layerBGain}
+                  display={`${Math.round(params.layerBGain * 100)}`}
+                  min={0} max={1} step={0.01}
+                  onChange={(v) => updateParam("layerBGain", v)}
+                  testId="slider-layer-b-gain"
+                />
+              </div>
+            )}
+          </Section>
+
           {/* Pulse Envelope */}
           <Section label="ENVELOPE">
             <SliderRow
@@ -614,6 +755,80 @@ function SliderRow({
         onValueChange={([v]) => onChange(v)}
         data-testid={testId}
       />
+    </div>
+  );
+}
+
+function SamplePicker({
+  label,
+  selectedUrl,
+  onSelect,
+  onPreview,
+}: {
+  label: string;
+  selectedUrl: string | null;
+  onSelect: (path: string) => void;
+  onPreview: (path: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const categories = Array.from(new Set(BUNDLED_SAMPLES.map(s => s.category)));
+
+  return (
+    <div className="flex flex-col gap-1">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="text-left px-2 py-1.5 rounded text-xs transition-all"
+        style={{
+          background: expanded ? "rgba(34,211,238,0.1)" : "transparent",
+          border: `1px solid ${expanded ? "rgba(34,211,238,0.4)" : "rgba(255,255,255,0.06)"}`,
+          color: expanded ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.65)",
+          fontSize: 9,
+        }}
+      >
+        {selectedUrl ? BUNDLED_SAMPLES.find(s => s.path === selectedUrl)?.label || "Selected" : label}
+      </button>
+      {expanded && (
+        <div className="flex flex-col gap-1 max-h-32 overflow-y-auto">
+          {categories.map((cat) => (
+            <div key={cat} className="flex flex-col gap-0.5">
+              <div className="text-xs ml-1" style={{ color: "rgba(255,255,255,0.25)", fontSize: 8, textTransform: "uppercase" }}>
+                {cat}
+              </div>
+              {BUNDLED_SAMPLES.filter(s => s.category === cat).map((sample) => (
+                <div key={sample.slug} className="flex gap-1">
+                  <button
+                    onClick={() => {
+                      onSelect(sample.path);
+                      setExpanded(false);
+                    }}
+                    className="flex-1 text-left px-1.5 py-1 rounded text-xs transition-all"
+                    style={{
+                      background: selectedUrl === sample.path ? "rgba(34,211,238,0.12)" : "transparent",
+                      border: `1px solid ${selectedUrl === sample.path ? "rgba(34,211,238,0.3)" : "rgba(255,255,255,0.05)"}`,
+                      color: selectedUrl === sample.path ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.5)",
+                      fontSize: 9,
+                    }}
+                  >
+                    {sample.label}
+                  </button>
+                  <button
+                    onClick={() => onPreview(sample.path)}
+                    className="px-1.5 py-1 rounded text-xs"
+                    style={{
+                      background: "rgba(255,255,255,0.05)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      color: "rgba(255,255,255,0.4)",
+                      fontSize: 8,
+                    }}
+                  >
+                    ▶
+                  </button>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
