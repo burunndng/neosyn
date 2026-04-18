@@ -3,9 +3,12 @@ export type BilateralPattern =
   | "mirrored-overlap"
   | "asymmetric"
   | "clustered"
-  | "randomized";
+  | "randomized"
+  | "ping-pong-sweep"
+  | "heartbeat"
+  | "bilateral-roll";
 
-export type CarrierType = "sine" | "pink-noise" | "brown-noise" | "band-limited";
+export type CarrierType = "sine" | "pink-noise" | "brown-noise" | "band-limited" | "sample";
 export type PanMode = "hard" | "smooth";
 
 export interface SynthParams {
@@ -13,6 +16,13 @@ export interface SynthParams {
   rate: number;
   carrierType: CarrierType;
   carrierFrequency: number;
+  sampleUrl: string | null;
+  layerAGain: number;
+  layerBEnabled: boolean;
+  layerBCarrierType: CarrierType;
+  layerBCarrierFrequency: number;
+  layerBGain: number;
+  layerBSampleUrl: string | null;
   attack: number;
   decay: number;
   dutyCycle: number;
@@ -33,6 +43,13 @@ export const DEFAULT_PARAMS: SynthParams = {
   rate: 4,
   carrierType: "sine",
   carrierFrequency: 200,
+  sampleUrl: null,
+  layerAGain: 1,
+  layerBEnabled: false,
+  layerBCarrierType: "pink-noise",
+  layerBCarrierFrequency: 200,
+  layerBGain: 0.5,
+  layerBSampleUrl: null,
   attack: 0.05,
   decay: 0.1,
   dutyCycle: 0.5,
@@ -86,28 +103,36 @@ function createNoiseBuffer(
   return buffer;
 }
 
-/**
- * Wraps the true source node (startable/stoppable) plus the output node
- * (may be a BiquadFilterNode for band-limited), so teardown always stops
- * the real source regardless of carrier type.
- */
 interface CarrierPair {
   source: OscillatorNode | AudioBufferSourceNode;
   output: AudioNode;
 }
 
-function createCarrier(ctx: BaseAudioContext, params: SynthParams): CarrierPair {
-  if (params.carrierType === "sine") {
+function createSynthCarrier(
+  ctx: BaseAudioContext,
+  type: CarrierType,
+  frequency: number,
+  sampleBuffer: AudioBuffer | null
+): CarrierPair {
+  if (type === "sine") {
     const osc = ctx.createOscillator();
     osc.type = "sine";
-    osc.frequency.value = params.carrierFrequency;
+    osc.frequency.value = frequency;
     osc.start(0);
     return { source: osc, output: osc };
   }
 
+  if (type === "sample" && sampleBuffer) {
+    const src = ctx.createBufferSource();
+    src.buffer = sampleBuffer;
+    src.loop = true;
+    src.start(0);
+    return { source: src, output: src };
+  }
+
   const noiseType: "pink" | "brown" | "white" =
-    params.carrierType === "pink-noise" ? "pink"
-    : params.carrierType === "brown-noise" ? "brown"
+    type === "pink-noise" ? "pink"
+    : type === "brown-noise" ? "brown"
     : "white";
 
   const buffer = createNoiseBuffer(ctx, noiseType);
@@ -116,10 +141,10 @@ function createCarrier(ctx: BaseAudioContext, params: SynthParams): CarrierPair 
   src.loop = true;
   src.start(0);
 
-  if (params.carrierType === "band-limited") {
+  if (type === "band-limited") {
     const filter = ctx.createBiquadFilter();
     filter.type = "bandpass";
-    filter.frequency.value = params.carrierFrequency;
+    filter.frequency.value = frequency;
     filter.Q.value = 2;
     src.connect(filter);
     return { source: src, output: filter };
@@ -128,19 +153,11 @@ function createCarrier(ctx: BaseAudioContext, params: SynthParams): CarrierPair 
   return { source: src, output: src };
 }
 
-/**
- * Bilateral audio graph using splitter/merger routing:
- *
- *   carrier.output → envGain → StereoPanner → ChannelSplitter(2)
- *                                               ├─ ch0 → leftLevel  ─┐
- *                                               └─ ch1 → rightLevel  ─┼→ ChannelMerger(2) → masterGain → destination
- *
- * Hard pan: panner.pan switches abruptly to -1 / 0 / +1 at each pulse
- * Smooth pan: panner.pan ramps linearly to the target position at each pulse
- * leftLevel / rightLevel apply independent per-ear gain regardless of panMode
- */
 interface BilateralGraph {
-  carrier: CarrierPair;
+  carrierA: CarrierPair;
+  carrierB: CarrierPair | null;
+  layerAGain: GainNode;
+  layerBGain: GainNode | null;
   envGain: GainNode;
   panner: StereoPannerNode;
   splitter: ChannelSplitterNode;
@@ -150,17 +167,38 @@ interface BilateralGraph {
   masterGain: GainNode;
 }
 
-function buildGraph(ctx: BaseAudioContext, params: SynthParams): BilateralGraph {
-  const carrier = createCarrier(ctx, params);
+function buildGraph(
+  ctx: BaseAudioContext,
+  params: SynthParams,
+  sampleBufferA: AudioBuffer | null,
+  sampleBufferB: AudioBuffer | null
+): BilateralGraph {
+  const carrierA = createSynthCarrier(ctx, params.carrierType, params.carrierFrequency, sampleBufferA);
+
+  const layerAGain = ctx.createGain();
+  layerAGain.gain.value = params.layerAGain;
 
   const envGain = ctx.createGain();
   envGain.gain.value = 0;
+
+  carrierA.output.connect(layerAGain);
+  layerAGain.connect(envGain);
+
+  let carrierB: CarrierPair | null = null;
+  let layerBGainNode: GainNode | null = null;
+
+  if (params.layerBEnabled) {
+    carrierB = createSynthCarrier(ctx, params.layerBCarrierType, params.layerBCarrierFrequency, sampleBufferB);
+    layerBGainNode = ctx.createGain();
+    layerBGainNode.gain.value = params.layerBGain;
+    carrierB.output.connect(layerBGainNode);
+    layerBGainNode.connect(envGain);
+  }
 
   const panner = ctx.createStereoPanner();
   panner.pan.value = -1;
 
   const splitter = ctx.createChannelSplitter(2);
-
   const leftLevel = ctx.createGain();
   leftLevel.gain.value = params.leftGain;
   const rightLevel = ctx.createGain();
@@ -170,7 +208,6 @@ function buildGraph(ctx: BaseAudioContext, params: SynthParams): BilateralGraph 
   const masterGain = ctx.createGain();
   masterGain.gain.value = 1;
 
-  carrier.output.connect(envGain);
   envGain.connect(panner);
   panner.connect(splitter);
   splitter.connect(leftLevel, 0);
@@ -179,15 +216,30 @@ function buildGraph(ctx: BaseAudioContext, params: SynthParams): BilateralGraph 
   rightLevel.connect(merger, 0, 1);
   merger.connect(masterGain);
 
-  return { carrier, envGain, panner, splitter, leftLevel, rightLevel, merger, masterGain };
+  return {
+    carrierA,
+    carrierB,
+    layerAGain,
+    layerBGain: layerBGainNode,
+    envGain,
+    panner,
+    splitter,
+    leftLevel,
+    rightLevel,
+    merger,
+    masterGain,
+  };
 }
 
 function teardownGraph(graph: BilateralGraph) {
-  try { graph.carrier.source.stop(); } catch {}
-  graph.carrier.source.disconnect();
-  if (graph.carrier.output !== graph.carrier.source) {
-    graph.carrier.output.disconnect();
+  for (const carrier of [graph.carrierA, graph.carrierB]) {
+    if (!carrier) continue;
+    try { carrier.source.stop(); } catch {}
+    carrier.source.disconnect();
+    if (carrier.output !== carrier.source) carrier.output.disconnect();
   }
+  graph.layerAGain.disconnect();
+  graph.layerBGain?.disconnect();
   graph.envGain.disconnect();
   graph.panner.disconnect();
   graph.splitter.disconnect();
@@ -201,6 +253,7 @@ interface ChunkState {
   nextLeft: number;
   nextRight: number;
   side: "left" | "right";
+  rollPhase: number;
 }
 
 interface ChunkResult {
@@ -208,10 +261,11 @@ interface ChunkResult {
   nextLeftTime: number;
   nextRightTime: number;
   nextSide: "left" | "right";
+  rollPhase: number;
 }
 
 function scheduleChunk(
-  _ctx: BaseAudioContext,
+  ctx: BaseAudioContext,
   graph: BilateralGraph,
   params: SynthParams,
   chunkStart: number,
@@ -224,12 +278,6 @@ function scheduleChunk(
   const interval = 1 / rate;
   const { envGain, panner } = graph;
 
-  /**
-   * Schedule the pulse gain envelope and pan position at time t.
-   * Smooth mode ramps the panner to the target channel over the first
-   * half of the pulse duration — tied to actual per-pulse channel events,
-   * so asymmetric / clustered / randomized patterns stay in sync.
-   */
   function schedulePulseAt(t: number, channel: "left" | "right" | "both", pulseDur: number) {
     envGain.gain.cancelScheduledValues(t);
     envGain.gain.setValueAtTime(0, t);
@@ -254,7 +302,7 @@ function scheduleChunk(
       side = side === "left" ? "right" : "left";
       t += interval;
     }
-    return { endTime: t, nextLeftTime: t, nextRightTime: t, nextSide: side };
+    return { endTime: t, nextLeftTime: t, nextRightTime: t, nextSide: side, rollPhase: 0 };
   }
 
   if (pattern === "mirrored-overlap") {
@@ -269,7 +317,7 @@ function scheduleChunk(
         t += interval;
       }
     }
-    return { endTime: t, nextLeftTime: t, nextRightTime: t, nextSide: side };
+    return { endTime: t, nextLeftTime: t, nextRightTime: t, nextSide: side, rollPhase: 0 };
   }
 
   if (pattern === "asymmetric") {
@@ -289,12 +337,7 @@ function scheduleChunk(
         break;
       }
     }
-    return {
-      endTime: Math.max(nextLeft, nextRight),
-      nextLeftTime: nextLeft,
-      nextRightTime: nextRight,
-      nextSide: side,
-    };
+    return { endTime: Math.max(nextLeft, nextRight), nextLeftTime: nextLeft, nextRightTime: nextRight, nextSide: side, rollPhase: 0 };
   }
 
   if (pattern === "clustered") {
@@ -309,23 +352,88 @@ function scheduleChunk(
       }
       t += params.clusterBurstCount * burstInterval + params.clusterPauseDuration;
     }
-    return { endTime: t, nextLeftTime: t, nextRightTime: t, nextSide: side };
+    return { endTime: t, nextLeftTime: t, nextRightTime: t, nextSide: side, rollPhase: 0 };
   }
 
   if (pattern === "randomized") {
     let t = Math.min(state.nextLeft, state.nextRight);
     while (t < chunkEnd) {
-      const ri =
-        params.randomMinInterval +
-        Math.random() * (params.randomMaxInterval - params.randomMinInterval);
+      const ri = params.randomMinInterval + Math.random() * (params.randomMaxInterval - params.randomMinInterval);
       schedulePulseAt(t, side, ri * dutyCycle);
       side = side === "left" ? "right" : "left";
       t += ri;
     }
-    return { endTime: t, nextLeftTime: t, nextRightTime: t, nextSide: side };
+    return { endTime: t, nextLeftTime: t, nextRightTime: t, nextSide: side, rollPhase: 0 };
   }
 
-  return { endTime: chunkEnd, nextLeftTime: chunkEnd, nextRightTime: chunkEnd, nextSide: side };
+  // Ping-Pong Sweep: continuous sine-wave panning, discrete envelope pulses
+  if (pattern === "ping-pong-sweep") {
+    let t = Math.min(state.nextLeft, state.nextRight);
+    const pulseDur = interval * dutyCycle;
+    // Schedule smooth panning as continuous sine wave over the chunk
+    const sweepPeriod = 1 / rate;
+    let sweepT = chunkStart;
+    const steps = Math.ceil(chunkDuration / 0.02);
+    for (let i = 0; i <= steps; i++) {
+      const st = chunkStart + (i / steps) * chunkDuration;
+      const elapsed = st - chunkStart + (chunkStart - (ctx?.currentTime ?? chunkStart));
+      const phase = (2 * Math.PI * st) / sweepPeriod;
+      panner.pan.linearRampToValueAtTime(Math.sin(phase), st);
+      sweepT = st;
+    }
+    // Still pulse the envelope
+    while (t < chunkEnd) {
+      envGain.gain.cancelScheduledValues(t);
+      envGain.gain.setValueAtTime(0, t);
+      envGain.gain.linearRampToValueAtTime(1, t + attack);
+      const sustain = Math.max(0, pulseDur - attack - decay);
+      envGain.gain.setValueAtTime(1, t + attack + sustain);
+      envGain.gain.linearRampToValueAtTime(0, t + attack + sustain + decay);
+      t += interval;
+    }
+    return { endTime: t, nextLeftTime: t, nextRightTime: t, nextSide: side, rollPhase: sweepT };
+  }
+
+  // Heartbeat: lub-dub double pulse per cycle, long gap between pairs
+  if (pattern === "heartbeat") {
+    let t = Math.min(state.nextLeft, state.nextRight);
+    const lubDur = 0.06;
+    const dubDur = 0.06;
+    const dubDelay = 0.14;
+    while (t < chunkEnd) {
+      // "lub"
+      if (t < chunkEnd) {
+        schedulePulseAt(t, side, lubDur);
+      }
+      // "dub"
+      const dubT = t + dubDelay;
+      if (dubT < chunkEnd) {
+        schedulePulseAt(dubT, side === "left" ? "right" : "left", dubDur);
+      }
+      side = side === "left" ? "right" : "left";
+      t += interval;
+    }
+    return { endTime: t, nextLeftTime: t, nextRightTime: t, nextSide: side, rollPhase: 0 };
+  }
+
+  // Bilateral Roll: accelerating burst that speeds up through the cycle then resets
+  if (pattern === "bilateral-roll") {
+    let t = Math.min(state.nextLeft, state.nextRight);
+    let rollPhase = state.rollPhase;
+    const cycleSteps = 6;
+    while (t < chunkEnd) {
+      const step = rollPhase % cycleSteps;
+      const speedFactor = 1 + step * 0.5;
+      const pulseDur = (interval / speedFactor) * dutyCycle;
+      schedulePulseAt(t, side, pulseDur);
+      side = side === "left" ? "right" : "left";
+      t += interval / speedFactor;
+      rollPhase++;
+    }
+    return { endTime: t, nextLeftTime: t, nextRightTime: t, nextSide: side, rollPhase };
+  }
+
+  return { endTime: chunkEnd, nextLeftTime: chunkEnd, nextRightTime: chunkEnd, nextSide: side, rollPhase: 0 };
 }
 
 export class AudioEngine {
@@ -333,9 +441,11 @@ export class AudioEngine {
   private graph: BilateralGraph | null = null;
   private userAudioSource: AudioBufferSourceNode | null = null;
   private userAudioBuffer: AudioBuffer | null = null;
+  private sampleBufferA: AudioBuffer | null = null;
+  private sampleBufferB: AudioBuffer | null = null;
   private scheduleInterval: ReturnType<typeof setInterval> | null = null;
   private scheduleEnd = 0;
-  private scheduleState: ChunkState = { nextLeft: 0, nextRight: 0, side: "left" };
+  private scheduleState: ChunkState = { nextLeft: 0, nextRight: 0, side: "left", rollPhase: 0 };
   private isPlaying = false;
   private params: SynthParams = { ...DEFAULT_PARAMS };
 
@@ -347,7 +457,11 @@ export class AudioEngine {
 
     const needsRebuild =
       newParams.carrierType !== prev.carrierType ||
-      newParams.panMode !== prev.panMode;
+      newParams.layerBEnabled !== prev.layerBEnabled ||
+      newParams.layerBCarrierType !== prev.layerBCarrierType ||
+      newParams.panMode !== prev.panMode ||
+      newParams.sampleUrl !== prev.sampleUrl ||
+      newParams.layerBSampleUrl !== prev.layerBSampleUrl;
 
     if (needsRebuild) {
       this.stop();
@@ -357,14 +471,28 @@ export class AudioEngine {
 
     this.graph.leftLevel.gain.setTargetAtTime(newParams.leftGain, this.ctx.currentTime, 0.01);
     this.graph.rightLevel.gain.setTargetAtTime(newParams.rightGain, this.ctx.currentTime, 0.01);
+    this.graph.layerAGain.gain.setTargetAtTime(newParams.layerAGain, this.ctx.currentTime, 0.01);
+    if (this.graph.layerBGain) {
+      this.graph.layerBGain.gain.setTargetAtTime(newParams.layerBGain, this.ctx.currentTime, 0.01);
+    }
 
     if (newParams.carrierFrequency !== prev.carrierFrequency) {
-      const { source } = this.graph.carrier;
+      const { source } = this.graph.carrierA;
       if (source instanceof OscillatorNode) {
         source.frequency.setTargetAtTime(newParams.carrierFrequency, this.ctx.currentTime, 0.01);
       }
-      if (this.graph.carrier.output instanceof BiquadFilterNode) {
-        this.graph.carrier.output.frequency.setTargetAtTime(newParams.carrierFrequency, this.ctx.currentTime, 0.01);
+      if (this.graph.carrierA.output instanceof BiquadFilterNode) {
+        this.graph.carrierA.output.frequency.setTargetAtTime(newParams.carrierFrequency, this.ctx.currentTime, 0.01);
+      }
+    }
+
+    if (newParams.layerBCarrierFrequency !== prev.layerBCarrierFrequency && this.graph.carrierB) {
+      const { source } = this.graph.carrierB;
+      if (source instanceof OscillatorNode) {
+        source.frequency.setTargetAtTime(newParams.layerBCarrierFrequency, this.ctx.currentTime, 0.01);
+      }
+      if (this.graph.carrierB.output instanceof BiquadFilterNode) {
+        this.graph.carrierB.output.frequency.setTargetAtTime(newParams.layerBCarrierFrequency, this.ctx.currentTime, 0.01);
       }
     }
   }
@@ -373,6 +501,30 @@ export class AudioEngine {
     if (!this.ctx) await this.ensureContext();
     const arrayBuffer = await file.arrayBuffer();
     this.userAudioBuffer = await this.ctx!.decodeAudioData(arrayBuffer);
+  }
+
+  async loadSampleUrl(url: string, layer: "A" | "B"): Promise<void> {
+    await this.ensureContext();
+    const resp = await fetch(url);
+    const arrayBuffer = await resp.arrayBuffer();
+    const decoded = await this.ctx!.decodeAudioData(arrayBuffer);
+    if (layer === "A") {
+      this.sampleBufferA = decoded;
+    } else {
+      this.sampleBufferB = decoded;
+    }
+  }
+
+  async previewSample(url: string): Promise<void> {
+    await this.ensureContext();
+    const resp = await fetch(url);
+    const arrayBuffer = await resp.arrayBuffer();
+    const decoded = await this.ctx!.decodeAudioData(arrayBuffer);
+    const src = this.ctx!.createBufferSource();
+    src.buffer = decoded;
+    src.connect(this.ctx!.destination);
+    src.start(0);
+    src.stop(this.ctx!.currentTime + 2);
   }
 
   private async ensureContext() {
@@ -389,7 +541,15 @@ export class AudioEngine {
     await this.ensureContext();
     this.isPlaying = true;
 
-    const graph = buildGraph(this.ctx!, this.params);
+    // Load sample buffers from URLs if needed
+    if (this.params.carrierType === "sample" && this.params.sampleUrl && !this.sampleBufferA) {
+      await this.loadSampleUrl(this.params.sampleUrl, "A");
+    }
+    if (this.params.layerBEnabled && this.params.layerBCarrierType === "sample" && this.params.layerBSampleUrl && !this.sampleBufferB) {
+      await this.loadSampleUrl(this.params.layerBSampleUrl, "B");
+    }
+
+    const graph = buildGraph(this.ctx!, this.params, this.sampleBufferA, this.sampleBufferB);
     this.graph = graph;
 
     if (this.userAudioBuffer) {
@@ -405,7 +565,7 @@ export class AudioEngine {
 
     const startOffset = this.ctx!.currentTime + 0.05;
     this.scheduleEnd = startOffset;
-    this.scheduleState = { nextLeft: startOffset, nextRight: startOffset, side: "left" };
+    this.scheduleState = { nextLeft: startOffset, nextRight: startOffset, side: "left", rollPhase: 0 };
     this.runScheduler();
   }
 
@@ -448,6 +608,7 @@ export class AudioEngine {
           nextLeft: result.nextLeftTime,
           nextRight: result.nextRightTime,
           side: result.nextSide,
+          rollPhase: result.rollPhase,
         };
         this.scheduleEnd = result.endTime;
       }
@@ -465,7 +626,10 @@ export class AudioEngine {
     const sampleRate = 44100;
     const offlineCtx = new OfflineAudioContext(2, sampleRate * durationSeconds, sampleRate);
 
-    const graph = buildGraph(offlineCtx, params);
+    const bufA = params.carrierType === "sample" ? this.sampleBufferA : null;
+    const bufB = (params.layerBEnabled && params.layerBCarrierType === "sample") ? this.sampleBufferB : null;
+
+    const graph = buildGraph(offlineCtx, params, bufA, bufB);
     graph.masterGain.connect(offlineCtx.destination);
 
     if (this.userAudioBuffer) {
@@ -476,7 +640,7 @@ export class AudioEngine {
       src.start(0);
     }
 
-    const initState: ChunkState = { nextLeft: 0, nextRight: 0, side: "left" };
+    const initState: ChunkState = { nextLeft: 0, nextRight: 0, side: "left", rollPhase: 0 };
     scheduleChunk(offlineCtx, graph, params, 0, durationSeconds, initState);
 
     return offlineCtx.startRendering();
