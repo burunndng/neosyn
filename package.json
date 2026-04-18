@@ -1,0 +1,7 @@
+{
+  "name": "neosyn",
+  "private": true,
+  "scripts": {
+    "build": "cd neosynth && npm install && npm run build"
+  }
+}
