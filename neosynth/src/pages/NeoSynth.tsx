@@ -13,10 +13,12 @@ import {
 } from "@/lib/stores/params";
 import type { BilateralPattern, CarrierType } from "@/lib/audio/AudioEngine";
 import { encodeWav, downloadBlob } from "@/lib/utils/wavExport";
-import { ChevronDown, ChevronUp, Play, Square, Download, Upload } from "lucide-react";
+import { ChevronDown, ChevronUp, Play, Square, Download, Upload, Zap } from "lucide-react";
+import { useLiveMode } from "@/lib/stores/liveMode";
 
 export function NeoSynth() {
   const { params, updateParam, exportParams, updateExportParam, activePreset, applyRatePreset, activeSessionPreset, applySessionPreset } = useSynthParams();
+  const { isLiveMode, setIsLiveMode } = useLiveMode();
   const [isPlaying, setIsPlaying] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState("");
@@ -128,6 +130,18 @@ export function NeoSynth() {
               {params.rate.toFixed(1)} Hz
             </span>
           )}
+          <button
+            onClick={() => setIsLiveMode(!isLiveMode)}
+            className="p-1.5 rounded transition-all"
+            style={{
+              background: isLiveMode ? "rgba(34,211,238,0.15)" : "transparent",
+              border: `1px solid ${isLiveMode ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.1)"}`,
+              color: isLiveMode ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.4)",
+            }}
+            title="Toggle Live Modular Mode (⚡)"
+          >
+            <Zap size={14} />
+          </button>
         </div>
       </header>
 
