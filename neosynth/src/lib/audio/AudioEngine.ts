@@ -1,3 +1,5 @@
+import type { FXRack } from "./FXRack";
+
 export type BilateralPattern =
   | "pure-alternation"
   | "mirrored-overlap"
@@ -449,6 +451,12 @@ export class AudioEngine {
   private isPlaying = false;
   private params: SynthParams = { ...DEFAULT_PARAMS };
 
+  // Live mode extensions
+  private fxRack: FXRack | null = null;
+  private streamDest: MediaStreamAudioDestinationNode | null = null;
+  private analyserNode: AnalyserNode | null = null;
+  private modOverrides: Partial<SynthParams> = {};
+
   updateParams(newParams: SynthParams) {
     const prev = this.params;
     this.params = { ...newParams };
@@ -561,7 +569,24 @@ export class AudioEngine {
       this.userAudioSource = src;
     }
 
-    graph.masterGain.connect(this.ctx!.destination);
+    // Route: masterGain → [fxRack →] [analyser →] destination
+    const finalDest: AudioNode = this.analyserNode
+      ? this.analyserNode
+      : this.ctx!.destination;
+
+    if (this.fxRack) {
+      graph.masterGain.connect(this.fxRack.input);
+      this.fxRack.output.connect(finalDest);
+    } else {
+      graph.masterGain.connect(finalDest);
+    }
+    if (this.analyserNode) {
+      this.analyserNode.connect(this.ctx!.destination);
+    }
+    if (this.streamDest) {
+      const streamSrc = this.fxRack ? this.fxRack.output : graph.masterGain;
+      streamSrc.connect(this.streamDest);
+    }
 
     const startOffset = this.ctx!.currentTime + 0.05;
     this.scheduleEnd = startOffset;
@@ -599,7 +624,7 @@ export class AudioEngine {
         const result = scheduleChunk(
           this.ctx,
           this.graph,
-          this.params,
+          this.effectiveParams(),
           this.scheduleEnd,
           CHUNK_DURATION,
           this.scheduleState
@@ -648,6 +673,77 @@ export class AudioEngine {
 
   getIsPlaying() {
     return this.isPlaying;
+  }
+
+  // ─── Live mode API ──────────────────────────────────────────────────────────
+
+  getContext(): AudioContext | null { return this.ctx; }
+  getGraph(): BilateralGraph | null { return this.graph; }
+
+  /** Override a param value for modulation (bypasses React state). */
+  setModOverride<K extends keyof SynthParams>(key: K, value: SynthParams[K]) {
+    this.modOverrides[key] = value;
+  }
+
+  clearModOverrides() {
+    this.modOverrides = {};
+  }
+
+  /** Params as read by the scheduler: base merged with mod overrides. */
+  private effectiveParams(): SynthParams {
+    return { ...this.params, ...this.modOverrides } as SynthParams;
+  }
+
+  /**
+   * Insert a FX rack between masterGain and destination.
+   * Call with null to remove.
+   */
+  setFxRack(rack: FXRack | null) {
+    if (!this.ctx) {
+      this.fxRack = rack;
+      return;
+    }
+    if (this.graph) {
+      this.graph.masterGain.disconnect();
+      if (rack) {
+        this.graph.masterGain.connect(rack.input);
+        rack.output.connect(this.analyserNode ?? (this.ctx.destination as unknown as AudioNode));
+        if (this.analyserNode) this.analyserNode.connect(this.ctx.destination);
+        if (this.streamDest) rack.output.connect(this.streamDest);
+      } else {
+        const dest = this.analyserNode ?? (this.ctx.destination as unknown as AudioNode);
+        this.graph.masterGain.connect(dest);
+        if (this.analyserNode) this.analyserNode.connect(this.ctx.destination);
+        if (this.streamDest) this.graph.masterGain.connect(this.streamDest);
+      }
+    }
+    this.fxRack = rack;
+  }
+
+  /** Create (or return existing) analyser node for envelope follower. */
+  getOrCreateAnalyser(): AnalyserNode {
+    if (!this.ctx) throw new Error("No audio context — start first");
+    if (!this.analyserNode) {
+      this.analyserNode = this.ctx.createAnalyser();
+      this.analyserNode.fftSize = 256;
+    }
+    return this.analyserNode;
+  }
+
+  /** Create a MediaStream from the output for live recording. */
+  createStreamDest(): MediaStream {
+    if (!this.ctx) throw new Error("No audio context — start first");
+    this.streamDest = this.ctx.createMediaStreamDestination();
+    const out = this.fxRack ? this.fxRack.output : this.graph?.masterGain;
+    if (out) out.connect(this.streamDest);
+    return this.streamDest.stream;
+  }
+
+  removeStreamDest() {
+    if (this.streamDest) {
+      try { this.streamDest.disconnect(); } catch {}
+      this.streamDest = null;
+    }
   }
 }
 
