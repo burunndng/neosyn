@@ -137,10 +137,10 @@ export class FXRack {
     this.reverbWetGain.connect(this.output);
   }
 
-  /** Apply all FX state params smoothly. */
-  applyState(state: FXState) {
+  /** Apply all FX state params smoothly. Pass `bpm` so delaySync resolves to seconds. */
+  applyState(state: FXState, bpm = 120) {
     const t = this.ctx.currentTime;
-    const TC = 0.015; // time constant for smooth changes
+    const TC = 0.015;
 
     this.hpf.frequency.setTargetAtTime(
       state.hpfEnabled ? state.hpfFreq : 20,
@@ -150,17 +150,15 @@ export class FXRack {
       state.lpfEnabled ? state.lpfFreq : 18000,
       t, TC
     );
-    this.delayNode.delayTime.setTargetAtTime(state.delayTime, t, TC);
+
+    const delaySecs = state.delaySync
+      ? Math.min(1.9, 1 / ((bpm / 60) * DIVISION_MULTIPLIERS[state.delaySync]))
+      : state.delayTime;
+    this.delayNode.delayTime.setTargetAtTime(delaySecs, t, TC);
+
     this.delayFbGain.gain.setTargetAtTime(state.delayFeedback, t, TC);
     this.delayWetGain.gain.setTargetAtTime(state.delayEnabled ? state.delayWet : 0, t, TC);
     this.reverbWetGain.gain.setTargetAtTime(state.reverbEnabled ? state.reverbWet : 0, t, TC);
-  }
-
-  /** Set delay time synced to clock. */
-  syncDelay(bpm: number, div: ClockDivision) {
-    const hz = (bpm / 60) * DIVISION_MULTIPLIERS[div];
-    const secs = Math.min(1.9, 1 / hz);
-    this.delayNode.delayTime.setTargetAtTime(secs, this.ctx.currentTime, 0.05);
   }
 
   destroy() {

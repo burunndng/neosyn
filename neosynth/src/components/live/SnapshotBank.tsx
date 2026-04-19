@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useLiveMode } from "@/lib/stores/liveMode";
 import { useSynthParams } from "@/lib/stores/params";
-import { Save, Download } from "lucide-react";
 
 const ACCENT = "hsl(192,87%,53%)";
 

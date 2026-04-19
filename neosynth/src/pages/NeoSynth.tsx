@@ -18,8 +18,7 @@ import { useLiveMode } from "@/lib/stores/liveMode";
 
 export function NeoSynth() {
   const { params, updateParam, exportParams, updateExportParam, activePreset, applyRatePreset, activeSessionPreset, applySessionPreset } = useSynthParams();
-  const { isLiveMode, setIsLiveMode } = useLiveMode();
-  const [isPlaying, setIsPlaying] = useState(false);
+  const { isLiveMode, setIsLiveMode, isPlaying, setIsPlaying } = useLiveMode();
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState("");
   const [userFileName, setUserFileName] = useState<string | null>(null);
@@ -33,15 +32,9 @@ export function NeoSynth() {
     audioEngine.updateParams(params);
   }, [params]);
 
-  const handlePlay = useCallback(async () => {
-    if (isPlaying) {
-      audioEngine.stop();
-      setIsPlaying(false);
-    } else {
-      await audioEngine.start();
-      setIsPlaying(true);
-    }
-  }, [isPlaying]);
+  const handlePlay = useCallback(() => {
+    setIsPlaying(!isPlaying);
+  }, [isPlaying, setIsPlaying]);
 
   const handleExport = useCallback(async () => {
     if (isExporting) return;
@@ -98,8 +91,8 @@ export function NeoSynth() {
   const showAsymmetric = params.pattern === "asymmetric";
   const showClustered = params.pattern === "clustered";
   const showRandomized = params.pattern === "randomized";
-  const showSineFreq = (params.carrierType === "sine" || params.carrierType === "band-limited") && params.carrierType !== "sample";
-  const showLayerBSineFreq = (params.layerBCarrierType === "sine" || params.layerBCarrierType === "band-limited") && params.layerBCarrierType !== "sample";
+  const showSineFreq = params.carrierType === "sine" || params.carrierType === "band-limited";
+  const showLayerBSineFreq = params.layerBCarrierType === "sine" || params.layerBCarrierType === "band-limited";
 
   return (
     <div className="flex flex-col min-h-screen" style={{ background: "#06070b", fontFamily: "'JetBrains Mono', monospace" }}>
@@ -576,9 +569,19 @@ export function NeoSynth() {
           {showRandomized && (
             <Section label="RANDOMIZED">
               <SliderRow label="MIN" value={params.randomMinInterval} display={`${params.randomMinInterval.toFixed(1)}s`}
-                min={0.1} max={1} step={0.05} onChange={(v) => updateParam("randomMinInterval", v)} testId="slider-rand-min" />
+                min={0.1} max={1} step={0.05}
+                onChange={(v) => {
+                  const clamped = Math.min(v, params.randomMaxInterval);
+                  updateParam("randomMinInterval", clamped);
+                }}
+                testId="slider-rand-min" />
               <SliderRow label="MAX" value={params.randomMaxInterval} display={`${params.randomMaxInterval.toFixed(1)}s`}
-                min={0.1} max={2} step={0.05} onChange={(v) => updateParam("randomMaxInterval", v)} testId="slider-rand-max" />
+                min={0.1} max={2} step={0.05}
+                onChange={(v) => {
+                  const clamped = Math.max(v, params.randomMinInterval);
+                  updateParam("randomMaxInterval", clamped);
+                }}
+                testId="slider-rand-max" />
             </Section>
           )}
 

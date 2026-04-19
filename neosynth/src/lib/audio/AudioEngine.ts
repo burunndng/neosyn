@@ -267,7 +267,7 @@ interface ChunkResult {
 }
 
 function scheduleChunk(
-  ctx: BaseAudioContext,
+  _ctx: BaseAudioContext,
   graph: BilateralGraph,
   params: SynthParams,
   chunkStart: number,
@@ -374,14 +374,11 @@ function scheduleChunk(
     const pulseDur = interval * dutyCycle;
     // Schedule smooth panning as continuous sine wave over the chunk
     const sweepPeriod = 1 / rate;
-    let sweepT = chunkStart;
     const steps = Math.ceil(chunkDuration / 0.02);
     for (let i = 0; i <= steps; i++) {
       const st = chunkStart + (i / steps) * chunkDuration;
-      const elapsed = st - chunkStart + (chunkStart - (ctx?.currentTime ?? chunkStart));
       const phase = (2 * Math.PI * st) / sweepPeriod;
       panner.pan.linearRampToValueAtTime(Math.sin(phase), st);
-      sweepT = st;
     }
     // Still pulse the envelope
     while (t < chunkEnd) {
@@ -393,7 +390,7 @@ function scheduleChunk(
       envGain.gain.linearRampToValueAtTime(0, t + attack + sustain + decay);
       t += interval;
     }
-    return { endTime: t, nextLeftTime: t, nextRightTime: t, nextSide: side, rollPhase: sweepT };
+    return { endTime: t, nextLeftTime: t, nextRightTime: t, nextSide: side, rollPhase: 0 };
   }
 
   // Heartbeat: lub-dub double pulse per cycle, long gap between pairs
@@ -449,6 +446,7 @@ export class AudioEngine {
   private scheduleEnd = 0;
   private scheduleState: ChunkState = { nextLeft: 0, nextRight: 0, side: "left", rollPhase: 0 };
   private isPlaying = false;
+  private playingListeners = new Set<(v: boolean) => void>();
   private params: SynthParams = { ...DEFAULT_PARAMS };
 
   // Live mode extensions
@@ -523,17 +521,52 @@ export class AudioEngine {
     }
   }
 
+  private previewSource: AudioBufferSourceNode | null = null;
+  private previewUrl: string | null = null;
+
+  /**
+   * Preview a sample. Calling again stops the previous preview first.
+   * Calling with the same URL while it's still playing toggles it off.
+   * Routes through masterGain when live so FX + recorder capture it.
+   */
   async previewSample(url: string): Promise<void> {
     await this.ensureContext();
+
+    // If the same sample is already playing, treat this as a stop.
+    const alreadyPlaying = this.previewSource !== null && this.previewUrl === url;
+    this.stopPreview();
+    if (alreadyPlaying) return;
+
     const resp = await fetch(url);
     const arrayBuffer = await resp.arrayBuffer();
     const decoded = await this.ctx!.decodeAudioData(arrayBuffer);
     const src = this.ctx!.createBufferSource();
     src.buffer = decoded;
-    src.connect(this.ctx!.destination);
+
+    const target: AudioNode = this.graph?.masterGain ?? this.ctx!.destination;
+    src.connect(target);
+    src.onended = () => {
+      if (this.previewSource === src) {
+        this.previewSource = null;
+        this.previewUrl = null;
+      }
+    };
     src.start(0);
-    src.stop(this.ctx!.currentTime + 2);
+    const dur = Math.min(decoded.duration, 2);
+    src.stop(this.ctx!.currentTime + dur);
+    this.previewSource = src;
+    this.previewUrl = url;
   }
+
+  stopPreview() {
+    if (!this.previewSource) return;
+    try { this.previewSource.stop(); } catch {}
+    try { this.previewSource.disconnect(); } catch {}
+    this.previewSource = null;
+    this.previewUrl = null;
+  }
+
+  getPreviewUrl(): string | null { return this.previewUrl; }
 
   private async ensureContext() {
     if (!this.ctx) {
@@ -548,6 +581,7 @@ export class AudioEngine {
     if (this.isPlaying) return;
     await this.ensureContext();
     this.isPlaying = true;
+    this.emitPlaying();
 
     // Load sample buffers from URLs if needed
     if (this.params.carrierType === "sample" && this.params.sampleUrl && !this.sampleBufferA) {
@@ -597,6 +631,7 @@ export class AudioEngine {
   stop() {
     if (!this.isPlaying) return;
     this.isPlaying = false;
+    this.emitPlaying();
     if (this.scheduleInterval) {
       clearInterval(this.scheduleInterval);
       this.scheduleInterval = null;
@@ -673,6 +708,16 @@ export class AudioEngine {
 
   getIsPlaying() {
     return this.isPlaying;
+  }
+
+  /** Subscribe to isPlaying changes. Returns an unsubscribe fn. */
+  subscribeIsPlaying(listener: (v: boolean) => void): () => void {
+    this.playingListeners.add(listener);
+    return () => { this.playingListeners.delete(listener); };
+  }
+
+  private emitPlaying() {
+    for (const l of this.playingListeners) l(this.isPlaying);
   }
 
   // ─── Live mode API ──────────────────────────────────────────────────────────

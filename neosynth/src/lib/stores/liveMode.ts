@@ -132,6 +132,10 @@ export interface LiveModeContextValue {
   updateMacro: (idx: number, patch: Partial<MacroConfig>) => void;
   setMacroValue: (idx: number, value: number) => void;
 
+  /** Live phase (0–1) of each LFO — read inside RAF, not stored in state. */
+  getLfo1Phase: () => number;
+  getLfo2Phase: () => number;
+
   fx: FXState;
   updateFx: (patch: Partial<FXState>) => void;
 
@@ -159,8 +163,17 @@ export function LiveModeProvider({
   setSynthParams: (p: SynthParams) => void;
 }) {
   const [isLiveMode, setIsLiveMode] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [isPlaying, setIsPlayingState] = useState(audioEngine.getIsPlaying());
   const [isRecording, setIsRecording] = useState(false);
+
+  // Single source of truth for isPlaying: the AudioEngine. Subscribe so both
+  // surfaces (classic + live) stay in sync when either toggles playback.
+  useEffect(() => audioEngine.subscribeIsPlaying(setIsPlayingState), []);
+
+  const setIsPlaying = useCallback((v: boolean) => {
+    if (v) void audioEngine.start();
+    else audioEngine.stop();
+  }, []);
   const [bpm, setBpmState] = useState(masterClock.bpm);
   const [lfo1, setLfo1] = useState<LFOState>(() => defaultLFOState("lfo1"));
   const [lfo2, setLfo2] = useState<LFOState>(() => defaultLFOState("lfo2"));
@@ -226,10 +239,11 @@ export function LiveModeProvider({
     }
   }, [isLiveMode, isPlaying]);
 
-  // Apply FX state changes to the rack
+  // Apply FX state changes to the rack (also re-applied whenever BPM changes
+  // so clock-synced delay time tracks tempo).
   useEffect(() => {
-    if (fxRackRef.current) fxRackRef.current.applyState(fx);
-  }, [fx]);
+    if (fxRackRef.current) fxRackRef.current.applyState(fx, bpm);
+  }, [fx, bpm]);
 
   // ─── Control loop ──────────────────────────────────────────────────────────
 
@@ -254,10 +268,11 @@ export function LiveModeProvider({
 
     const macroVals = macrosRef.current.map((m) => m.value);
 
+    // Sequencer value is silent (0) when the current step's gate is off.
     const sourceValues: Record<ModSourceId, number> = {
       lfo1: lfo1Val,
       lfo2: lfo2Val,
-      seq: seqResult.value,
+      seq: seqResult.gate ? seqResult.value : 0,
       env: envVal,
       macro1: macroVals[0],
       macro2: macroVals[1],
@@ -447,6 +462,9 @@ export function LiveModeProvider({
     }
   }, []);
 
+  const getLfo1Phase = useCallback(() => lfo1Ref.current.phase, []);
+  const getLfo2Phase = useCallback(() => lfo2Ref.current.phase, []);
+
   const value: LiveModeContextValue = {
     isLiveMode, setIsLiveMode,
     isPlaying, setIsPlaying,
@@ -457,6 +475,7 @@ export function LiveModeProvider({
     seq, updateSeq, seqStep,
     modRoutings, addRouting, updateRouting, removeRouting,
     macros, updateMacro, setMacroValue,
+    getLfo1Phase, getLfo2Phase,
     fx, updateFx,
     snapshots, saveSnapshot, recallSnapshot,
     morphTime, setMorphTime,

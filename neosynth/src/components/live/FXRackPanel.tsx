@@ -6,7 +6,7 @@ import type { ClockDivision } from "@/lib/audio/MasterClock";
 const ACCENT = "hsl(192,87%,53%)";
 
 export function FXRackPanel() {
-  const { fx, updateFx, bpm } = useLiveMode();
+  const { fx, updateFx } = useLiveMode();
 
   return (
     <div className="flex gap-3">
@@ -88,8 +88,8 @@ export function FXRackPanel() {
             max={1.9}
             size={40}
             label="TIME"
-            valueLabel={`${fx.delayTime.toFixed(2)}s`}
-            onChange={(v) => updateFx({ delayTime: v })}
+            valueLabel={fx.delaySync ? "SYNC" : `${fx.delayTime.toFixed(2)}s`}
+            onChange={(v) => updateFx({ delayTime: v, delaySync: null })}
           />
           <Knob
             value={fx.delayFeedback}
@@ -124,7 +124,7 @@ export function FXRackPanel() {
           >
             FREE
           </button>
-          {CLOCK_DIVISIONS.slice(0, 4).map((d) => (
+          {CLOCK_DIVISIONS.map((d) => (
             <button
               key={d}
               onClick={() => updateFx({ delaySync: d as ClockDivision })}

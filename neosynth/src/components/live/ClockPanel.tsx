@@ -1,7 +1,6 @@
 import { useCallback } from "react";
 import { Play, Square, Circle, StopCircle } from "lucide-react";
 import { useLiveMode } from "@/lib/stores/liveMode";
-import { audioEngine } from "@/lib/audio/AudioEngine";
 
 const ACCENT = "hsl(192,87%,53%)";
 const DIM = "rgba(255,255,255,0.5)";
@@ -13,14 +12,8 @@ export function ClockPanel() {
     isRecording, startRecording, stopRecording,
   } = useLiveMode();
 
-  const handlePlay = useCallback(async () => {
-    if (isPlaying) {
-      audioEngine.stop();
-      setIsPlaying(false);
-    } else {
-      await audioEngine.start();
-      setIsPlaying(true);
-    }
+  const handlePlay = useCallback(() => {
+    setIsPlaying(!isPlaying);
   }, [isPlaying, setIsPlaying]);
 
   const handleBpmInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {

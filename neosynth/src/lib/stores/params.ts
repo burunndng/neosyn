@@ -341,6 +341,15 @@ export function SynthParamsProvider({ children }: { children: ReactNode }) {
   const updateParam = useCallback(<K extends keyof SynthParams>(key: K, value: SynthParams[K]) => {
     setParams(prev => ({ ...prev, [key]: value }));
     setActiveSessionPreset(null);
+    if (key === "rate") {
+      setActivePreset(prev => {
+        if (!prev) return prev;
+        const preset = RATE_PRESETS.find(p => p.name === prev);
+        if (!preset) return prev;
+        const rate = value as number;
+        return rate >= preset.minRate && rate <= preset.maxRate ? prev : null;
+      });
+    }
   }, []);
 
   const applyRatePreset = useCallback((preset: RatePreset) => {
