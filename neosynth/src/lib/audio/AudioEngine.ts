@@ -790,6 +790,13 @@ export class AudioEngine {
       this.streamDest = null;
     }
   }
+
+  /** Scale the master gain (0–1, default 1). */
+  setMasterVolume(volume: number) {
+    if (!this.graph) return;
+    const t = this.ctx?.currentTime ?? 0;
+    this.graph.masterGain.gain.setTargetAtTime(Math.max(0, Math.min(1, volume)), t, 0.01);
+  }
 }
 
 export const audioEngine = new AudioEngine();

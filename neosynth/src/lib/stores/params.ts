@@ -328,6 +328,8 @@ export interface SynthParamsContextValue {
   applyRatePreset: (preset: RatePreset) => void;
   activeSessionPreset: string | null;
   applySessionPreset: (preset: SessionPreset) => void;
+  masterVolume: number;
+  setMasterVolume: (v: number) => void;
 }
 
 const SynthParamsContext = createContext<SynthParamsContextValue | null>(null);
@@ -337,6 +339,7 @@ export function SynthParamsProvider({ children }: { children: ReactNode }) {
   const [exportParams, setExportParams] = useState<ExportParams>({ ...DEFAULT_EXPORT_PARAMS });
   const [activePreset, setActivePreset] = useState<string | null>("theta");
   const [activeSessionPreset, setActiveSessionPreset] = useState<string | null>(null);
+  const [masterVolume, setMasterVolume] = useState(1.0);
 
   const updateParam = useCallback(<K extends keyof SynthParams>(key: K, value: SynthParams[K]) => {
     setParams(prev => ({ ...prev, [key]: value }));
@@ -378,6 +381,8 @@ export function SynthParamsProvider({ children }: { children: ReactNode }) {
     applyRatePreset,
     activeSessionPreset,
     applySessionPreset,
+    masterVolume,
+    setMasterVolume,
   };
 
   return createElement(SynthParamsContext.Provider, { value }, children);

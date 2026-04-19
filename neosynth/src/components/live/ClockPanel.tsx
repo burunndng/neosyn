@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { Play, Square, Circle, StopCircle } from "lucide-react";
 import { useLiveMode } from "@/lib/stores/liveMode";
+import { useSynthParams } from "@/lib/stores/params";
 
 const ACCENT = "hsl(192,87%,53%)";
 const DIM = "rgba(255,255,255,0.5)";
@@ -11,6 +12,7 @@ export function ClockPanel() {
     isPlaying, setIsPlaying,
     isRecording, startRecording, stopRecording,
   } = useLiveMode();
+  const { masterVolume, setMasterVolume } = useSynthParams();
 
   const handlePlay = useCallback(() => {
     setIsPlaying(!isPlaying);
@@ -123,6 +125,24 @@ export function ClockPanel() {
           style={{ flex: 1, accentColor: ACCENT }}
         />
         <span style={{ fontSize: 9, color: "rgba(255,255,255,0.3)" }}>300</span>
+      </div>
+
+      <div style={{ width: 1, height: 36, background: "rgba(255,255,255,0.08)" }} />
+
+      {/* Master Volume */}
+      <div className="flex items-center gap-2">
+        <span style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", textTransform: "uppercase" }}>VOL</span>
+        <input
+          type="range"
+          min={0} max={1} step={0.05}
+          value={masterVolume}
+          onChange={(e) => setMasterVolume(parseFloat(e.target.value))}
+          style={{ width: 80, accentColor: ACCENT }}
+          title="Master Volume"
+        />
+        <span style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", minWidth: 22 }}>
+          {Math.round(masterVolume * 100)}%
+        </span>
       </div>
 
       {isRecording && (

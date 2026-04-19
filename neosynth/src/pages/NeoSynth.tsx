@@ -17,7 +17,7 @@ import { ChevronDown, ChevronUp, Play, Square, Download, Upload, Zap } from "luc
 import { useLiveMode } from "@/lib/stores/liveMode";
 
 export function NeoSynth() {
-  const { params, updateParam, exportParams, updateExportParam, activePreset, applyRatePreset, activeSessionPreset, applySessionPreset } = useSynthParams();
+  const { params, updateParam, exportParams, updateExportParam, activePreset, applyRatePreset, activeSessionPreset, applySessionPreset, masterVolume, setMasterVolume } = useSynthParams();
   const { isLiveMode, setIsLiveMode, isPlaying, setIsPlaying } = useLiveMode();
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState("");
@@ -31,6 +31,10 @@ export function NeoSynth() {
   useEffect(() => {
     audioEngine.updateParams(params);
   }, [params]);
+
+  useEffect(() => {
+    audioEngine.setMasterVolume(masterVolume);
+  }, [masterVolume]);
 
   const handlePlay = useCallback(() => {
     setIsPlaying(!isPlaying);
@@ -117,12 +121,31 @@ export function NeoSynth() {
         <span className="text-xs" style={{ color: "rgba(255,255,255,0.38)", letterSpacing: "0.06em" }}>
           Bilateral Isochronic Audio Synthesizer
         </span>
-        <div className="ml-auto flex gap-2 items-center">
+        <div className="ml-auto flex gap-3 items-center">
           {isPlaying && (
             <span className="text-xs" style={{ color: "hsl(192,87%,53%)", opacity: 0.9 }}>
               {params.rate.toFixed(1)} Hz
             </span>
           )}
+          <div className="flex items-center gap-2">
+            <span style={{ fontSize: 8, color: "rgba(255,255,255,0.3)" }}>VOL</span>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={masterVolume}
+              onChange={(e) => setMasterVolume(parseFloat(e.target.value))}
+              style={{
+                width: 80,
+                accentColor: "hsl(192,87%,53%)",
+              }}
+              title={`Master Volume: ${Math.round(masterVolume * 100)}%`}
+            />
+            <span style={{ fontSize: 8, color: "rgba(255,255,255,0.4)", minWidth: 20 }}>
+              {Math.round(masterVolume * 100)}%
+            </span>
+          </div>
           <button
             onClick={() => setIsLiveMode(!isLiveMode)}
             className="p-1.5 rounded transition-all"
