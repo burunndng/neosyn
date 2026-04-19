@@ -1,9 +1,10 @@
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useState } from "react";
 
 interface KnobProps {
   value: number;
   min: number;
   max: number;
+  defaultValue?: number;
   size?: number;
   label?: string;
   valueLabel?: string;
@@ -14,7 +15,7 @@ interface KnobProps {
 const ACCENT = "hsl(192,87%,53%)";
 
 export function Knob({
-  value, min, max,
+  value, min, max, defaultValue = (min + max) / 2,
   size = 52,
   label,
   valueLabel,
@@ -23,9 +24,9 @@ export function Knob({
 }: KnobProps) {
   const startY = useRef<number | null>(null);
   const startVal = useRef(value);
+  const [isFocused, setIsFocused] = useState(false);
 
   const norm = Math.max(0, Math.min(1, (value - min) / (max - min)));
-  // 270° arc starting at 225° (bottom-left) → 135° (bottom-right)
   const startAngle = 225;
   const totalArc = 270;
   const angleDeg = startAngle + norm * totalArc;
@@ -36,7 +37,6 @@ export function Knob({
   const px = cx + r * Math.sin(rad);
   const py = cy - r * Math.cos(rad);
 
-  // Track arc path (225° → 135°, 270° sweep)
   function arcPath(fromAngle: number, toAngle: number, radius: number) {
     const fa = (fromAngle * Math.PI) / 180;
     const ta = (toAngle * Math.PI) / 180;
@@ -51,40 +51,82 @@ export function Knob({
   const trackPath = arcPath(startAngle, startAngle + totalArc, r);
   const valuePath = norm > 0.001 ? arcPath(startAngle, startAngle + norm * totalArc, r) : null;
 
-  const onMouseDown = useCallback((e: React.MouseEvent) => {
+  const clampValue = (v: number) => Math.max(min, Math.min(max, v));
+
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
     startY.current = e.clientY;
     startVal.current = value;
 
-    const onMove = (ev: MouseEvent) => {
+    const onMove = (ev: PointerEvent) => {
       const dy = startY.current! - ev.clientY;
-      const delta = (dy / 150) * (max - min);
-      onChange(Math.max(min, Math.min(max, startVal.current + delta)));
+      let deltaScale = 1;
+      if (ev.shiftKey) deltaScale = 0.25;
+      if (ev.ctrlKey || ev.metaKey) deltaScale = 4;
+      const delta = (dy / 150) * (max - min) * deltaScale;
+      onChange(clampValue(startVal.current + delta));
     };
     const onUp = () => {
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
     };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+  }, [value, min, max, onChange]);
+
+  const handleDoubleClick = useCallback(() => {
+    onChange(clampValue(defaultValue));
+  }, [onChange, defaultValue, min, max]);
+
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    const step = (max - min) / 200;
+    const direction = e.deltaY > 0 ? -1 : 1;
+    const delta = step * direction * (e.shiftKey ? 0.25 : 1) * (e.ctrlKey || e.metaKey ? 4 : 1);
+    onChange(clampValue(value + delta));
+  }, [value, min, max, onChange]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const step = (max - min) / 200;
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const delta = step * (e.shiftKey ? 0.25 : 1) * (e.ctrlKey || e.metaKey ? 4 : 1);
+      onChange(clampValue(value + delta));
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const delta = step * (e.shiftKey ? 0.25 : 1) * (e.ctrlKey || e.metaKey ? 4 : 1);
+      onChange(clampValue(value - delta));
+    }
   }, [value, min, max, onChange]);
 
   return (
     <div className="flex flex-col items-center gap-0.5" style={{ userSelect: "none" }}>
       <svg
         width={size} height={size}
-        style={{ cursor: "ns-resize" }}
-        onMouseDown={onMouseDown}
+        style={{
+          cursor: "ns-resize",
+          outline: isFocused ? `2px solid ${color}` : "none",
+          borderRadius: "50%",
+          padding: 2,
+        }}
+        onPointerDown={handlePointerDown}
+        onDoubleClick={handleDoubleClick}
+        onWheel={handleWheel}
+        onKeyDown={handleKeyDown}
+        tabIndex={0}
+        role="slider"
+        aria-valuemin={min}
+        aria-valuemax={max}
+        aria-valuenow={value}
+        aria-label={label}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
       >
-        {/* Background circle */}
         <circle cx={cx} cy={cy} r={r + 3} fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
-        {/* Track arc */}
         <path d={trackPath} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth={3} strokeLinecap="round" />
-        {/* Value arc */}
         {valuePath && (
           <path d={valuePath} fill="none" stroke={color} strokeWidth={3} strokeLinecap="round" />
         )}
-        {/* Pointer dot */}
         <circle cx={px} cy={py} r={2.5} fill={color} />
       </svg>
       {valueLabel !== undefined && (
