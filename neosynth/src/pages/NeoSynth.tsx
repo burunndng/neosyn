@@ -26,15 +26,8 @@ export function NeoSynth() {
   const [showEducation, setShowEducation] = useState(false);
   const [showSamples, setShowSamples] = useState(false);
   const [showSessionPresets, setShowSessionPresets] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    audioEngine.updateParams(params);
-  }, [params]);
-
-  useEffect(() => {
-    audioEngine.setMasterVolume(masterVolume);
-  }, [masterVolume]);
 
   const handlePlay = useCallback(() => {
     setIsPlaying(!isPlaying);
@@ -59,6 +52,53 @@ export function NeoSynth() {
     }
     setIsExporting(false);
   }, [params, exportParams, isExporting]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target && target.isContentEditable)
+      ) {
+        return;
+      }
+      switch (e.key) {
+        case " ":
+          e.preventDefault();
+          setIsPlaying(!isPlaying);
+          break;
+        case "e":
+        case "E":
+          e.preventDefault();
+          handleExport();
+          break;
+        case "l":
+        case "L":
+          e.preventDefault();
+          setIsLiveMode(!isLiveMode);
+          break;
+        case "?":
+          e.preventDefault();
+          setShowHelp(!showHelp);
+          break;
+        default:
+          break;
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isPlaying, setIsPlaying, isLiveMode, setIsLiveMode, showHelp, handleExport]);
+
+  useEffect(() => {
+    audioEngine.updateParams(params);
+  }, [params]);
+
+  useEffect(() => {
+    audioEngine.setMasterVolume(masterVolume);
+  }, [masterVolume]);
 
   const handleFileUpload = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
