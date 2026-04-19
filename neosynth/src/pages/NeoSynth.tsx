@@ -3,6 +3,7 @@ import type { ReactNode, ChangeEvent } from "react";
 import { Slider } from "@/components/ui/slider";
 import { BilateralField } from "@/components/BilateralField";
 import { audioEngine } from "@/lib/audio/AudioEngine";
+import { CLOCK_DIVISIONS } from "@/lib/audio/MasterClock";
 import {
   useSynthParams,
   RATE_PRESETS,
@@ -16,6 +17,16 @@ import { encodeWav, downloadBlob } from "@/lib/utils/wavExport";
 import { ChevronDown, ChevronUp, Play, Square, Download, Upload, Zap } from "lucide-react";
 import { useLiveMode } from "@/lib/stores/liveMode";
 
+const DIVISION_MULTIPLIERS: Record<string, number> = {
+  "1/1":  0.25,
+  "1/2":  0.5,
+  "1/4":  1,
+  "1/8":  2,
+  "1/16": 4,
+  "1/4T": 4 / 3,
+  "1/8T": 8 / 3,
+};
+
 export function NeoSynth() {
   const { params, updateParam, exportParams, updateExportParam, activePreset, applyRatePreset, activeSessionPreset, applySessionPreset, masterVolume, setMasterVolume } = useSynthParams();
   const { isLiveMode, setIsLiveMode, isPlaying, setIsPlaying } = useLiveMode();
@@ -27,6 +38,9 @@ export function NeoSynth() {
   const [showSamples, setShowSamples] = useState(false);
   const [showSessionPresets, setShowSessionPresets] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [useBpmSync, setUseBpmSync] = useState(false);
+  const [bpmValue, setBpmValue] = useState(120);
+  const [bpmDivision, setBpmDivision] = useState<string>("1/4");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handlePlay = useCallback(() => {
@@ -307,18 +321,104 @@ export function NeoSynth() {
             </div>
           </Section>
 
-          {/* Rate Slider */}
-          <Section label={`RATE — ${params.rate.toFixed(2)} HZ`}>
-            <Slider
-              min={0.5}
-              max={30}
-              step={0.1}
-              value={[params.rate]}
-              onValueChange={([v]) => updateParam("rate", v)}
-              data-testid="slider-rate"
-              className="mt-1"
-            />
-          </Section>
+          {/* Rate Slider / BPM Sync */}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <div className="text-xs tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.2)", fontSize: 9, letterSpacing: "0.15em" }}>
+                RATE — {params.rate.toFixed(2)} HZ
+              </div>
+              <button
+                onClick={() => setUseBpmSync(!useBpmSync)}
+                className="px-2 py-0.5 rounded text-xs transition-all"
+                style={{
+                  background: useBpmSync ? "rgba(34,211,238,0.15)" : "transparent",
+                  border: `1px solid ${useBpmSync ? "rgba(34,211,238,0.5)" : "rgba(255,255,255,0.1)"}`,
+                  color: useBpmSync ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.4)",
+                  fontSize: 8,
+                  fontWeight: 600,
+                }}
+                title="Toggle BPM sync mode"
+              >
+                {useBpmSync ? "SYNC" : "FREE"}
+              </button>
+            </div>
+
+            {useBpmSync ? (
+              <div className="flex flex-col gap-2">
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label style={{ display: "block", fontSize: 8, color: "rgba(255,255,255,0.3)", marginBottom: 4 }}>
+                      BPM
+                    </label>
+                    <input
+                      type="number"
+                      min={20} max={300} step={1}
+                      value={bpmValue}
+                      onChange={(e) => {
+                        const bpm = parseFloat(e.target.value);
+                        if (!isNaN(bpm)) {
+                          setBpmValue(bpm);
+                          const hz = (bpm / 60) * DIVISION_MULTIPLIERS[bpmDivision];
+                          updateParam("rate", hz);
+                        }
+                      }}
+                      style={{
+                        width: "100%",
+                        padding: "4px 6px",
+                        borderRadius: 3,
+                        border: "1px solid rgba(34,211,238,0.3)",
+                        background: "rgba(34,211,238,0.05)",
+                        color: "hsl(192,87%,53%)",
+                        fontSize: 10,
+                        fontFamily: "'JetBrains Mono', monospace",
+                        fontWeight: 600,
+                      }}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label style={{ display: "block", fontSize: 8, color: "rgba(255,255,255,0.3)", marginBottom: 4 }}>
+                      DIV
+                    </label>
+                    <select
+                      value={bpmDivision}
+                      onChange={(e) => {
+                        const div = e.target.value;
+                        setBpmDivision(div);
+                        const hz = (bpmValue / 60) * DIVISION_MULTIPLIERS[div];
+                        updateParam("rate", hz);
+                      }}
+                      style={{
+                        width: "100%",
+                        padding: "4px 6px",
+                        borderRadius: 3,
+                        border: "1px solid rgba(34,211,238,0.3)",
+                        background: "rgba(34,211,238,0.05)",
+                        color: "hsl(192,87%,53%)",
+                        fontSize: 9,
+                        fontFamily: "'JetBrains Mono', monospace",
+                      }}
+                    >
+                      {CLOCK_DIVISIONS.map((div) => (
+                        <option key={div} value={div}>
+                          {div}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <Slider
+                min={0.5}
+                max={30}
+                step={0.1}
+                value={[params.rate]}
+                onValueChange={([v]) => updateParam("rate", v)}
+                data-testid="slider-rate"
+                className="mt-1"
+              />
+            )}
+          </div>
         </aside>
 
         {/* CENTER COLUMN — Bilateral Field + Transport */}
