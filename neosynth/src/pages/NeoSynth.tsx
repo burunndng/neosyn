@@ -98,8 +98,8 @@ export function NeoSynth() {
   const showAsymmetric = params.pattern === "asymmetric";
   const showClustered = params.pattern === "clustered";
   const showRandomized = params.pattern === "randomized";
-  const showSineFreq = (params.carrierType === "sine" || params.carrierType === "band-limited") && params.carrierType !== "sample";
-  const showLayerBSineFreq = (params.layerBCarrierType === "sine" || params.layerBCarrierType === "band-limited") && params.layerBCarrierType !== "sample";
+  const showSineFreq = (params.carrierType === "sine" || params.carrierType === "band-limited");
+  const showLayerBSineFreq = (params.layerBCarrierType === "sine" || params.layerBCarrierType === "band-limited");
 
   return (
     <div className="flex flex-col min-h-screen" style={{ background: "#06070b", fontFamily: "'JetBrains Mono', monospace" }}>
