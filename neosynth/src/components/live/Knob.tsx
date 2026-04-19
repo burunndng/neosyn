@@ -130,12 +130,12 @@ export function Knob({
         <circle cx={px} cy={py} r={2.5} fill={color} />
       </svg>
       {valueLabel !== undefined && (
-        <span style={{ fontSize: 9, color: "rgba(255,255,255,0.5)", fontFamily: "'JetBrains Mono', monospace" }}>
+        <span style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", fontFamily: "'JetBrains Mono', monospace" }}>
           {valueLabel}
         </span>
       )}
       {label && (
-        <span style={{ fontSize: 8, color: "rgba(255,255,255,0.35)", fontFamily: "'JetBrains Mono', monospace", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+        <span style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", fontFamily: "'JetBrains Mono', monospace", textTransform: "uppercase", letterSpacing: "0.05em" }}>
           {label}
         </span>
       )}

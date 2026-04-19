@@ -71,7 +71,7 @@ export function ModMatrixPanel() {
               style={{
                 padding: "1px 5px",
                 borderRadius: 2,
-                fontSize: 9,
+                fontSize: 11,
                 background: "rgba(255,0,0,0.1)",
                 border: "1px solid rgba(255,0,0,0.3)",
                 color: "#ff6b6b",
@@ -96,7 +96,7 @@ export function ModMatrixPanel() {
               style={{
                 padding: "1px 6px",
                 borderRadius: 2,
-                fontSize: 9,
+                fontSize: 11,
                 background: "rgba(34,211,238,0.12)",
                 border: `1px solid ${ACCENT}`,
                 color: ACCENT,
@@ -114,7 +114,7 @@ export function ModMatrixPanel() {
       {/* Routing rows */}
       <div className="flex flex-col gap-1">
         {modRoutings.length === 0 && (
-          <div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)", padding: "8px" }}>
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.2)", padding: "8px" }}>
             No routings. Click + ADD to create one.
           </div>
         )}
@@ -151,7 +151,7 @@ function RoutingRow({
           flex: 1,
           padding: "2px 4px",
           borderRadius: 2,
-          fontSize: 8,
+          fontSize: 10,
           background: "rgba(255,255,255,0.05)",
           border: "1px solid rgba(255,255,255,0.1)",
           color: "rgba(255,255,255,0.7)",
@@ -188,7 +188,7 @@ function RoutingRow({
           flex: 1,
           padding: "2px 4px",
           borderRadius: 2,
-          fontSize: 8,
+          fontSize: 10,
           background: "rgba(255,255,255,0.05)",
           border: "1px solid rgba(255,255,255,0.1)",
           color: "rgba(255,255,255,0.7)",
@@ -213,7 +213,7 @@ function RoutingRow({
           background: routing.bypass ? "rgba(255,255,255,0.06)" : "rgba(34,211,238,0.12)",
           border: `1px solid ${routing.bypass ? "rgba(255,255,255,0.1)" : ACCENT}`,
           color: routing.bypass ? "rgba(255,255,255,0.3)" : ACCENT,
-          fontSize: 8,
+          fontSize: 10,
           cursor: "pointer",
           fontFamily: "'JetBrains Mono', monospace",
           fontWeight: 600,

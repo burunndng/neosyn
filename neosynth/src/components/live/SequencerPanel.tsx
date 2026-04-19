@@ -29,14 +29,14 @@ export function SequencerPanel() {
           SEQUENCER
         </span>
         <div className="flex items-center gap-2">
-          <span style={{ fontSize: 9, color: "rgba(255,255,255,0.3)" }}>DIV</span>
+          <span style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>DIV</span>
           <div className="flex gap-1">
             {CLOCK_DIVISIONS.map((d) => (
               <button
                 key={d}
                 onClick={() => updateSeq({ syncDiv: d as ClockDivision })}
                 style={{
-                  padding: "2px 5px", borderRadius: 3, fontSize: 8,
+                  padding: "2px 5px", borderRadius: 3, fontSize: 10,
                   background: seq.syncDiv === d ? "rgba(34,211,238,0.12)" : "transparent",
                   border: `1px solid ${seq.syncDiv === d ? ACCENT : "rgba(255,255,255,0.07)"}`,
                   color: seq.syncDiv === d ? ACCENT : "rgba(255,255,255,0.3)",
@@ -50,7 +50,7 @@ export function SequencerPanel() {
           <button
             onClick={() => updateSeq({ running: !seq.running })}
             style={{
-              padding: "2px 8px", borderRadius: 3, fontSize: 8,
+              padding: "2px 8px", borderRadius: 3, fontSize: 10,
               background: seq.running ? "rgba(34,211,238,0.12)" : "rgba(255,255,255,0.06)",
               border: `1px solid ${seq.running ? ACCENT : "rgba(255,255,255,0.1)"}`,
               color: seq.running ? ACCENT : "rgba(255,255,255,0.3)",

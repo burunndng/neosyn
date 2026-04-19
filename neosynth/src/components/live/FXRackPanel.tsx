@@ -13,7 +13,7 @@ export function FXRackPanel() {
       {/* HPF */}
       <div className="flex flex-col gap-1.5 p-2 rounded" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", minWidth: 100 }}>
         <div className="flex items-center justify-between">
-          <span style={{ fontSize: 8, color: ACCENT, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>HPF</span>
+          <span style={{ fontSize: 10, color: ACCENT, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>HPF</span>
           <button
             onClick={() => updateFx({ hpfEnabled: !fx.hpfEnabled })}
             style={{
@@ -40,7 +40,7 @@ export function FXRackPanel() {
       {/* LPF */}
       <div className="flex flex-col gap-1.5 p-2 rounded" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", minWidth: 100 }}>
         <div className="flex items-center justify-between">
-          <span style={{ fontSize: 8, color: ACCENT, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>LPF</span>
+          <span style={{ fontSize: 10, color: ACCENT, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>LPF</span>
           <button
             onClick={() => updateFx({ lpfEnabled: !fx.lpfEnabled })}
             style={{
@@ -67,7 +67,7 @@ export function FXRackPanel() {
       {/* Delay */}
       <div className="flex flex-col gap-1.5 p-2 rounded" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", minWidth: 120 }}>
         <div className="flex items-center justify-between">
-          <span style={{ fontSize: 8, color: ACCENT, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>DELAY</span>
+          <span style={{ fontSize: 10, color: ACCENT, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>DELAY</span>
           <button
             onClick={() => updateFx({ delayEnabled: !fx.delayEnabled })}
             style={{
@@ -145,7 +145,7 @@ export function FXRackPanel() {
       {/* Reverb */}
       <div className="flex flex-col gap-1.5 p-2 rounded" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", minWidth: 100 }}>
         <div className="flex items-center justify-between">
-          <span style={{ fontSize: 8, color: ACCENT, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>REVERB</span>
+          <span style={{ fontSize: 10, color: ACCENT, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>REVERB</span>
           <button
             onClick={() => updateFx({ reverbEnabled: !fx.reverbEnabled })}
             style={{

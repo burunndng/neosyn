@@ -29,11 +29,11 @@ export function SnapshotBank() {
         className="flex items-center gap-3 p-2 rounded"
         style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
       >
-        <span style={{ fontSize: 9, color: ACCENT, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>MORPH</span>
+        <span style={{ fontSize: 11, color: ACCENT, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>MORPH</span>
         <button
           onClick={() => setMorphMode(!morphMode)}
           style={{
-            padding: "2px 8px", borderRadius: 3, fontSize: 8,
+            padding: "2px 8px", borderRadius: 3, fontSize: 10,
             background: morphMode ? "rgba(34,211,238,0.12)" : "rgba(255,255,255,0.06)",
             border: `1px solid ${morphMode ? ACCENT : "rgba(255,255,255,0.1)"}`,
             color: morphMode ? ACCENT : "rgba(255,255,255,0.3)",
@@ -51,7 +51,7 @@ export function SnapshotBank() {
             style={{ flex: 1, accentColor: ACCENT }}
             disabled={!morphMode}
           />
-          <span style={{ fontSize: 8, color: "rgba(255,255,255,0.4)", minWidth: 30 }}>
+          <span style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", minWidth: 30 }}>
             {morphTime.toFixed(1)}s
           </span>
         </div>
@@ -84,7 +84,7 @@ export function SnapshotBank() {
               border: `1px solid ${activeSnapshot === idx ? ACCENT : snap ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.05)"}`,
               color: activeSnapshot === idx ? ACCENT : snap ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.2)",
               cursor: "pointer",
-              fontSize: 9,
+              fontSize: 11,
               fontFamily: "'JetBrains Mono', monospace",
               fontWeight: snap ? 600 : 400,
               display: "flex",

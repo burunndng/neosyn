@@ -90,18 +90,18 @@ export function LiveModeLayout() {
       {/* Middle: Mod sources + Mod matrix + Knobs + FX */}
       <div className="flex flex-col gap-4 p-4 flex-1 overflow-y-auto">
         {/* Mod sources */}
-        <div className="flex gap-4">
+        <div className="flex gap-4 live-row-modulation">
           <LFOPanel />
           <SequencerPanel />
         </div>
 
         {/* Mod matrix + Macros + FX side-by-side */}
-        <div className="flex gap-4">
+        <div className="flex gap-4 live-row-modulation">
           <div className="flex-1">
             <ModMatrixPanel />
           </div>
           <div className="flex flex-col gap-3 items-center">
-            <span style={{ fontSize: 9, color: ACCENT, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>MACROS</span>
+            <span style={{ fontSize: 11, color: ACCENT, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>MACROS</span>
             <MacroKnobs />
           </div>
         </div>

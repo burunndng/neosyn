@@ -67,7 +67,7 @@ export function MacroKnobs() {
                 border: "none",
                 outline: "none",
                 color: ACCENT,
-                fontSize: 9,
+                fontSize: 11,
                 fontFamily: "'JetBrains Mono', monospace",
                 textAlign: "center",
                 textTransform: "uppercase",
@@ -144,7 +144,7 @@ export function MacroKnobs() {
             {/* List existing assignments */}
             {macros[editMacroIdx].assignments.length > 0 && (
               <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", textTransform: "uppercase", marginBottom: 6 }}>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", textTransform: "uppercase", marginBottom: 6 }}>
                   Active Assignments
                 </div>
                 {macros[editMacroIdx].assignments.map((asgn, idx) => (
@@ -164,7 +164,7 @@ export function MacroKnobs() {
                   >
                     <div>
                       {ASSIGNABLE_PARAMS.find(p => p.key === asgn.paramKey)?.label || asgn.paramKey}
-                      <div style={{ fontSize: 8, color: "rgba(255,255,255,0.4)" }}>
+                      <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>
                         {asgn.minVal.toFixed(2)} → {asgn.maxVal.toFixed(2)}
                       </div>
                     </div>
@@ -176,7 +176,7 @@ export function MacroKnobs() {
                         background: "rgba(255,0,0,0.1)",
                         border: "1px solid rgba(255,0,0,0.3)",
                         color: "#ff6b6b",
-                        fontSize: 8,
+                        fontSize: 10,
                         cursor: "pointer",
                       }}
                     >
@@ -188,11 +188,11 @@ export function MacroKnobs() {
             )}
 
             <div style={{ borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: 12 }}>
-              <div style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", textTransform: "uppercase", marginBottom: 8 }}>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", textTransform: "uppercase", marginBottom: 8 }}>
                 Add New Assignment
               </div>
               <div style={{ marginBottom: 12 }}>
-                <label style={{ display: "block", fontSize: 8, color: "rgba(255,255,255,0.4)", marginBottom: 4 }}>
+                <label style={{ display: "block", fontSize: 10, color: "rgba(255,255,255,0.4)", marginBottom: 4 }}>
                   Target Parameter
                 </label>
                 <select
@@ -219,7 +219,7 @@ export function MacroKnobs() {
 
               <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
                 <div style={{ flex: 1 }}>
-                  <label style={{ display: "block", fontSize: 8, color: "rgba(255,255,255,0.4)", marginBottom: 4 }}>
+                  <label style={{ display: "block", fontSize: 10, color: "rgba(255,255,255,0.4)", marginBottom: 4 }}>
                     Min Value
                   </label>
                   <input
@@ -240,7 +240,7 @@ export function MacroKnobs() {
                   />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <label style={{ display: "block", fontSize: 8, color: "rgba(255,255,255,0.4)", marginBottom: 4 }}>
+                  <label style={{ display: "block", fontSize: 10, color: "rgba(255,255,255,0.4)", marginBottom: 4 }}>
                     Max Value
                   </label>
                   <input

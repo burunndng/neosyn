@@ -13,7 +13,7 @@ function LFOShapeIcon({ shape }: { shape: string }) {
     sine:     "M1,8 Q4,1 7,8 Q10,15 13,8 Q16,1 19,8",
     triangle: "M1,14 L5,2 L10,14 L15,2 L19,14",
     saw:      "M1,14 L10,2 L10,14 L19,2",
-    square:   "M1,14 L1,2 L10,2 L10,14 L19,14 L19,2",
+    square:   "M1,12 L1,4 L7,4 L7,12 L13,12 L13,4 L19,4",
     "s&h":    "M1,14 L5,14 L5,6 L9,6 L9,10 L13,10 L13,3 L17,3 L17,14",
   };
   return (
@@ -68,7 +68,7 @@ function LFOUnit({ state, phaseFn, update, label }: LFOUnitProps) {
               background: state.enabled ? "rgba(34,211,238,0.15)" : "rgba(255,255,255,0.06)",
               border: `1px solid ${state.enabled ? ACCENT : "rgba(255,255,255,0.12)"}`,
               color: state.enabled ? ACCENT : "rgba(255,255,255,0.3)",
-              fontSize: 8, cursor: "pointer",
+              fontSize: 10, cursor: "pointer",
             }}
             title="Enable/disable"
           >
@@ -113,7 +113,7 @@ function LFOUnit({ state, phaseFn, update, label }: LFOUnitProps) {
               <div style={{ width: 44, height: 44, borderRadius: "50%", background: "rgba(34,211,238,0.08)", border: `1px solid ${ACCENT}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <span style={{ fontSize: 10, color: ACCENT, fontFamily: "'JetBrains Mono', monospace" }}>{state.syncDiv}</span>
               </div>
-              <span style={{ fontSize: 8, color: "rgba(255,255,255,0.35)", textTransform: "uppercase" }}>RATE</span>
+              <span style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", textTransform: "uppercase" }}>RATE</span>
             </div>
           )}
         </div>
@@ -130,7 +130,7 @@ function LFOUnit({ state, phaseFn, update, label }: LFOUnitProps) {
         <button
           onClick={() => update({ syncDiv: null })}
           style={{
-            padding: "2px 5px", borderRadius: 3, fontSize: 8,
+            padding: "2px 5px", borderRadius: 3, fontSize: 10,
             background: state.syncDiv === null ? "rgba(34,211,238,0.12)" : "transparent",
             border: `1px solid ${state.syncDiv === null ? ACCENT : "rgba(255,255,255,0.07)"}`,
             color: state.syncDiv === null ? ACCENT : "rgba(255,255,255,0.3)",
@@ -144,7 +144,7 @@ function LFOUnit({ state, phaseFn, update, label }: LFOUnitProps) {
             key={d}
             onClick={() => update({ syncDiv: d as ClockDivision })}
             style={{
-              padding: "2px 5px", borderRadius: 3, fontSize: 8,
+              padding: "2px 5px", borderRadius: 3, fontSize: 10,
               background: state.syncDiv === d ? "rgba(34,211,238,0.12)" : "transparent",
               border: `1px solid ${state.syncDiv === d ? ACCENT : "rgba(255,255,255,0.07)"}`,
               color: state.syncDiv === d ? ACCENT : "rgba(255,255,255,0.3)",
@@ -160,7 +160,7 @@ function LFOUnit({ state, phaseFn, update, label }: LFOUnitProps) {
       <button
         onClick={() => update({ bipolar: !state.bipolar })}
         style={{
-          padding: "2px 0", borderRadius: 3, fontSize: 8, width: "100%",
+          padding: "2px 0", borderRadius: 3, fontSize: 10, width: "100%",
           background: state.bipolar ? "rgba(34,211,238,0.08)" : "transparent",
           border: `1px solid ${state.bipolar ? ACCENT : "rgba(255,255,255,0.07)"}`,
           color: state.bipolar ? ACCENT : "rgba(255,255,255,0.3)",

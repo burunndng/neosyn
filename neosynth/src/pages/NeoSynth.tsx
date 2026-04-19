@@ -254,7 +254,7 @@ export function NeoSynth() {
             </span>
           )}
           <div className="flex items-center gap-2">
-            <span style={{ fontSize: 8, color: "rgba(255,255,255,0.3)" }}>VOL</span>
+            <span style={{ fontSize: 10, color: "rgba(255,255,255,0.3)" }}>VOL</span>
             <input
               type="range"
               min={0}
@@ -268,7 +268,7 @@ export function NeoSynth() {
               }}
               title={`Master Volume: ${Math.round(masterVolume * 100)}%`}
             />
-            <span style={{ fontSize: 8, color: "rgba(255,255,255,0.4)", minWidth: 20 }}>
+            <span style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", minWidth: 20 }}>
               {Math.round(masterVolume * 100)}%
             </span>
           </div>
@@ -281,6 +281,8 @@ export function NeoSynth() {
               color: isLiveMode ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.4)",
             }}
             title="Toggle Live Modular Mode (⚡)"
+            aria-label="Toggle Live Modular Mode"
+            aria-pressed={isLiveMode}
           >
             <Zap size={14} />
           </button>
@@ -288,11 +290,11 @@ export function NeoSynth() {
       </header>
 
       {/* Main three-column layout */}
-      <div className="flex flex-1 gap-0 overflow-hidden" style={{ minHeight: 0 }}>
+      <div className="flex flex-1 gap-0 overflow-hidden neosynth-columns" style={{ minHeight: 0 }}>
 
         {/* LEFT COLUMN — Pattern & Carrier */}
         <aside
-          className="flex flex-col gap-4 p-4 overflow-y-auto shrink-0"
+          className="flex flex-col gap-4 p-4 overflow-y-auto shrink-0 neosynth-aside neosynth-aside-left"
           style={{
             width: 220,
             background: "#0e1016",
@@ -385,7 +387,7 @@ export function NeoSynth() {
                       {preset.minRate}–{preset.maxRate} Hz
                     </span>
                   </div>
-                  <div style={{ color: "rgba(255,255,255,0.25)", fontSize: 9, lineHeight: 1.3 }}>
+                  <div style={{ color: "rgba(255,255,255,0.25)", fontSize: 11, lineHeight: 1.3 }}>
                     {preset.description.split("·")[1]?.trim()}
                   </div>
                 </button>
@@ -396,7 +398,7 @@ export function NeoSynth() {
           {/* Rate Slider / BPM Sync */}
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
-              <div className="text-xs tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.2)", fontSize: 9, letterSpacing: "0.15em" }}>
+              <div className="text-xs tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.2)", fontSize: 11, letterSpacing: "0.15em" }}>
                 RATE — {params.rate.toFixed(2)} HZ
               </div>
               <button
@@ -406,7 +408,7 @@ export function NeoSynth() {
                   background: useBpmSync ? "rgba(34,211,238,0.15)" : "transparent",
                   border: `1px solid ${useBpmSync ? "rgba(34,211,238,0.5)" : "rgba(255,255,255,0.1)"}`,
                   color: useBpmSync ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.4)",
-                  fontSize: 8,
+                  fontSize: 10,
                   fontWeight: 600,
                 }}
                 title="Toggle BPM sync mode"
@@ -419,7 +421,7 @@ export function NeoSynth() {
               <div className="flex flex-col gap-2">
                 <div className="flex gap-2">
                   <div className="flex-1">
-                    <label style={{ display: "block", fontSize: 8, color: "rgba(255,255,255,0.3)", marginBottom: 4 }}>
+                    <label style={{ display: "block", fontSize: 10, color: "rgba(255,255,255,0.3)", marginBottom: 4 }}>
                       BPM
                     </label>
                     <input
@@ -448,7 +450,7 @@ export function NeoSynth() {
                     />
                   </div>
                   <div className="flex-1">
-                    <label style={{ display: "block", fontSize: 8, color: "rgba(255,255,255,0.3)", marginBottom: 4 }}>
+                    <label style={{ display: "block", fontSize: 10, color: "rgba(255,255,255,0.3)", marginBottom: 4 }}>
                       DIV
                     </label>
                     <select
@@ -466,7 +468,7 @@ export function NeoSynth() {
                         border: "1px solid rgba(34,211,238,0.3)",
                         background: "rgba(34,211,238,0.05)",
                         color: "hsl(192,87%,53%)",
-                        fontSize: 9,
+                        fontSize: 11,
                         fontFamily: "'JetBrains Mono', monospace",
                       }}
                     >
@@ -495,7 +497,7 @@ export function NeoSynth() {
 
         {/* CENTER COLUMN — Bilateral Field + Transport */}
         <main
-          className="flex flex-col flex-1 items-center justify-between p-5 gap-4"
+          className="flex flex-col flex-1 items-center justify-between p-5 gap-4 neosynth-center"
           style={{
             background: "#08090e",
             borderLeft: "1px solid rgba(34,211,238,0.15)",
@@ -565,7 +567,7 @@ export function NeoSynth() {
                       background: "rgba(239,68,68,0.15)",
                       border: "1px solid rgba(239,68,68,0.4)",
                       color: "#ef4444",
-                      fontSize: 9,
+                      fontSize: 11,
                       fontWeight: 600,
                       letterSpacing: "0.08em",
                     }}
@@ -628,7 +630,7 @@ export function NeoSynth() {
 
         {/* RIGHT COLUMN — Carriers, Envelope, Export */}
         <aside
-          className="flex flex-col gap-4 p-4 overflow-y-auto shrink-0"
+          className="flex flex-col gap-4 p-4 overflow-y-auto shrink-0 neosynth-aside neosynth-aside-right"
           style={{
             width: 240,
             background: "#0e1016",
@@ -639,7 +641,7 @@ export function NeoSynth() {
           {/* Layer A Carrier */}
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
-              <div className="text-xs tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.2)", fontSize: 9, letterSpacing: "0.15em" }}>
+              <div className="text-xs tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.2)", fontSize: 11, letterSpacing: "0.15em" }}>
                 LAYER A CARRIER
               </div>
               <div className="flex gap-1">
@@ -653,7 +655,7 @@ export function NeoSynth() {
                     background: params.layerAMuted ? "rgba(239,68,68,0.15)" : "transparent",
                     border: `1px solid ${params.layerAMuted ? "rgba(239,68,68,0.5)" : "rgba(255,255,255,0.1)"}`,
                     color: params.layerAMuted ? "#ef4444" : "rgba(255,255,255,0.4)",
-                    fontSize: 8,
+                    fontSize: 10,
                     fontWeight: 600,
                   }}
                   title="Mute Layer A"
@@ -667,7 +669,7 @@ export function NeoSynth() {
                     background: params.soloLayer === "A" ? "rgba(34,211,238,0.15)" : "transparent",
                     border: `1px solid ${params.soloLayer === "A" ? "rgba(34,211,238,0.5)" : "rgba(255,255,255,0.1)"}`,
                     color: params.soloLayer === "A" ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.4)",
-                    fontSize: 8,
+                    fontSize: 10,
                     fontWeight: 600,
                   }}
                   title="Solo Layer A"
@@ -730,7 +732,7 @@ export function NeoSynth() {
           {/* Layer B Toggle */}
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
-              <div className="text-xs tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.2)", fontSize: 9, letterSpacing: "0.15em" }}>
+              <div className="text-xs tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.2)", fontSize: 11, letterSpacing: "0.15em" }}>
                 LAYER B
               </div>
               <div className="flex gap-1">
@@ -744,7 +746,7 @@ export function NeoSynth() {
                     background: params.layerBMuted ? "rgba(239,68,68,0.15)" : "transparent",
                     border: `1px solid ${params.layerBMuted ? "rgba(239,68,68,0.5)" : "rgba(255,255,255,0.1)"}`,
                     color: params.layerBMuted ? "#ef4444" : "rgba(255,255,255,0.4)",
-                    fontSize: 8,
+                    fontSize: 10,
                     fontWeight: 600,
                   }}
                   title="Mute Layer B"
@@ -759,7 +761,7 @@ export function NeoSynth() {
                     background: params.soloLayer === "B" ? "rgba(34,211,238,0.15)" : "transparent",
                     border: `1px solid ${params.soloLayer === "B" ? "rgba(34,211,238,0.5)" : "rgba(255,255,255,0.1)"}`,
                     color: params.soloLayer === "B" ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.4)",
-                    fontSize: 8,
+                    fontSize: 10,
                     fontWeight: 600,
                     opacity: params.layerBEnabled ? 1 : 0.5,
                   }}
@@ -993,7 +995,7 @@ export function NeoSynth() {
               />
             </div>
             {userFileName && !audioError && (
-              <div className="text-xs mt-1" style={{ color: "hsl(192,87%,53%)", fontSize: 9, opacity: 0.7 }}>
+              <div className="text-xs mt-1" style={{ color: "hsl(192,87%,53%)", fontSize: 11, opacity: 0.7 }}>
                 Loaded · mixed into output
               </div>
             )}
@@ -1007,7 +1009,7 @@ export function NeoSynth() {
           {/* Export Settings */}
           <Section label="EXPORT SETTINGS">
             <div className="mb-2">
-              <div className="text-xs mb-1" style={{ color: "rgba(255,255,255,0.3)", fontSize: 9, letterSpacing: "0.1em" }}>BIT DEPTH</div>
+              <div className="text-xs mb-1" style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, letterSpacing: "0.1em" }}>BIT DEPTH</div>
               <div className="flex gap-2">
                 {([16, 24] as const).map((bd) => (
                   <button
@@ -1028,7 +1030,7 @@ export function NeoSynth() {
               </div>
             </div>
             <div>
-              <div className="text-xs mb-1" style={{ color: "rgba(255,255,255,0.3)", fontSize: 9, letterSpacing: "0.1em" }}>DURATION</div>
+              <div className="text-xs mb-1" style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, letterSpacing: "0.1em" }}>DURATION</div>
               <div className="flex flex-wrap gap-1">
                 {DURATION_OPTIONS.map((opt) => (
                   <button
@@ -1065,13 +1067,36 @@ export function NeoSynth() {
             onToggle={() => setShowSafety(!showSafety)}
             testId="panel-safety"
           >
-            <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.45)" }}>
-              This tool produces bilateral auditory stimulation. Use at comfortable volume levels only.
-              Discontinue use if you experience discomfort, dizziness, or headaches. Not recommended
-              for individuals with epilepsy or seizure disorders. Consult a healthcare professional
-              before use if you have any medical conditions. This tool is for educational and
-              experimental purposes and is not medical equipment.
-            </p>
+            <div className="flex flex-col gap-3">
+              <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.45)" }}>
+                This tool produces bilateral auditory stimulation. Use at comfortable volume levels only.
+                Discontinue use if you experience discomfort, dizziness, or headaches. Not recommended
+                for individuals with epilepsy or seizure disorders. Consult a healthcare professional
+                before use if you have any medical conditions. This tool is for educational and
+                experimental purposes and is not medical equipment.
+              </p>
+              <div
+                className="text-xs leading-relaxed"
+                style={{ color: "rgba(255,255,255,0.35)", fontSize: 10, borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 10 }}
+              >
+                <div style={{ color: "rgba(34,211,238,0.55)", letterSpacing: "0.06em", marginBottom: 4 }}>
+                  SAMPLE ATTRIBUTIONS
+                </div>
+                <p>
+                  Bundled sound samples are sourced from{" "}
+                  <a
+                    href="https://freesound.org"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: "rgba(34,211,238,0.7)", textDecoration: "underline" }}
+                  >
+                    Freesound.org
+                  </a>{" "}
+                  under Creative Commons licenses. Authors: zesoundresearchinc, lezaarth, waveplaysfx,
+                  angelkunev, fmaudio, birdofthenorth, ajanhallinta, redswan_studios, moodyfingers, cvltiv8r.
+                </p>
+              </div>
+            </div>
           </CollapsiblePanel>
 
           <div style={{ width: 1, background: "rgba(255,255,255,0.05)" }} />
@@ -1114,7 +1139,7 @@ export function NeoSynth() {
 function Section({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-2">
-      <div className="text-xs tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.2)", fontSize: 9, letterSpacing: "0.15em" }}>
+      <div className="text-xs tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.2)", fontSize: 11, letterSpacing: "0.15em" }}>
         {label}
       </div>
       {children}
@@ -1144,7 +1169,7 @@ function SliderRow({
   return (
     <div className="flex flex-col gap-1">
       <div className="flex justify-between items-baseline">
-        <span className="text-xs" style={{ color: "rgba(255,255,255,0.38)", fontSize: 9, letterSpacing: "0.1em" }}>
+        <span className="text-xs" style={{ color: "rgba(255,255,255,0.38)", fontSize: 11, letterSpacing: "0.1em" }}>
           {label}
         </span>
         <span className="text-xs font-semibold" style={{ color: "rgba(34,211,238,0.75)", fontSize: 10 }}>
@@ -1205,7 +1230,7 @@ function SamplePicker({
           background: expanded ? "rgba(34,211,238,0.1)" : "transparent",
           border: `1px solid ${expanded ? "rgba(34,211,238,0.4)" : "rgba(255,255,255,0.06)"}`,
           color: expanded ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.65)",
-          fontSize: 9,
+          fontSize: 11,
         }}
       >
         {selectedUrl ? BUNDLED_SAMPLES.find(s => s.path === selectedUrl)?.label || "Selected" : label}
@@ -1214,7 +1239,7 @@ function SamplePicker({
         <div className="flex flex-col gap-1 max-h-32 overflow-y-auto">
           {categories.map((cat) => (
             <div key={cat} className="flex flex-col gap-0.5">
-              <div className="text-xs ml-1" style={{ color: "rgba(255,255,255,0.25)", fontSize: 8, textTransform: "uppercase" }}>
+              <div className="text-xs ml-1" style={{ color: "rgba(255,255,255,0.25)", fontSize: 10, textTransform: "uppercase" }}>
                 {cat}
               </div>
               {BUNDLED_SAMPLES.filter(s => s.category === cat).map((sample) => (
@@ -1229,7 +1254,7 @@ function SamplePicker({
                       background: selectedUrl === sample.path ? "rgba(34,211,238,0.12)" : "transparent",
                       border: `1px solid ${selectedUrl === sample.path ? "rgba(34,211,238,0.3)" : "rgba(255,255,255,0.05)"}`,
                       color: selectedUrl === sample.path ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.5)",
-                      fontSize: 9,
+                      fontSize: 11,
                     }}
                   >
                     {sample.label}
@@ -1242,7 +1267,7 @@ function SamplePicker({
                       background: playingPath === sample.path ? "rgba(34,211,238,0.15)" : "rgba(255,255,255,0.05)",
                       border: `1px solid ${playingPath === sample.path ? "rgba(34,211,238,0.4)" : "rgba(255,255,255,0.08)"}`,
                       color: playingPath === sample.path ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.4)",
-                      fontSize: 8,
+                      fontSize: 10,
                       minWidth: 22,
                       cursor: loadingPath !== null && loadingPath !== sample.path ? "not-allowed" : "pointer",
                     }}
