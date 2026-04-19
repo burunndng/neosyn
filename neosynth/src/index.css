@@ -181,6 +181,11 @@
   animation: led-blink 0.6s ease-in-out infinite;
 }
 
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 @layer base {
   * {
     @apply border-border;

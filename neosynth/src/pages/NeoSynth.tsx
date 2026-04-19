@@ -41,6 +41,9 @@ export function NeoSynth() {
   const [useBpmSync, setUseBpmSync] = useState(false);
   const [bpmValue, setBpmValue] = useState(120);
   const [bpmDivision, setBpmDivision] = useState<string>("1/4");
+  const [isLoadingAudio, setIsLoadingAudio] = useState(false);
+  const [audioError, setAudioError] = useState<string | null>(null);
+  const [isDragOverAudio, setIsDragOverAudio] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handlePlay = useCallback(() => {
@@ -117,8 +120,43 @@ export function NeoSynth() {
   const handleFileUpload = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setUserFileName(file.name);
-    await audioEngine.setUserAudio(file);
+    setAudioError(null);
+    setIsLoadingAudio(true);
+    try {
+      await audioEngine.setUserAudio(file);
+      setUserFileName(file.name);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to load audio file";
+      setAudioError(msg);
+      setTimeout(() => setAudioError(null), 3000);
+    } finally {
+      setIsLoadingAudio(false);
+    }
+  }, []);
+
+  const handleAudioDrop = useCallback(async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOverAudio(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("audio/") && !["audio/wav", "audio/mp3", "audio/mpeg"].includes(file.type)) {
+      setAudioError("Please drop an audio file (WAV, MP3, etc.)");
+      setTimeout(() => setAudioError(null), 3000);
+      return;
+    }
+    setAudioError(null);
+    setIsLoadingAudio(true);
+    try {
+      await audioEngine.setUserAudio(file);
+      setUserFileName(file.name);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to load audio file";
+      setAudioError(msg);
+      setTimeout(() => setAudioError(null), 3000);
+    } finally {
+      setIsLoadingAudio(false);
+    }
   }, []);
 
   const handleSampleSelect = useCallback(async (path: string, layer: "A" | "B") => {
@@ -829,32 +867,59 @@ export function NeoSynth() {
 
           {/* User Audio Upload */}
           <Section label="MIX AUDIO">
-            <button
-              data-testid="button-upload-audio"
-              onClick={() => fileInputRef.current?.click()}
-              className="w-full flex items-center gap-2 px-2 py-2 rounded text-xs transition-all"
+            <div
+              onDrop={handleAudioDrop}
+              onDragOver={(e) => { e.preventDefault(); setIsDragOverAudio(true); }}
+              onDragLeave={() => setIsDragOverAudio(false)}
+              className="flex flex-col gap-2"
               style={{
-                background: "transparent",
-                border: "1px solid rgba(255,255,255,0.1)",
-                color: "rgba(255,255,255,0.45)",
+                padding: "8px",
+                borderRadius: "6px",
+                border: `2px dashed ${isDragOverAudio ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.1)"}`,
+                background: isDragOverAudio ? "rgba(34,211,238,0.05)" : "transparent",
+                transition: "all 150ms",
               }}
             >
-              <Upload size={11} />
-              <span className="truncate">
-                {userFileName ? userFileName : "Upload WAV / MP3"}
-              </span>
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".wav,.mp3,audio/*"
-              onChange={handleFileUpload}
-              className="hidden"
-              data-testid="input-audio-file"
-            />
-            {userFileName && (
+              <button
+                data-testid="button-upload-audio"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isLoadingAudio}
+                className="w-full flex items-center gap-2 px-2 py-2 rounded text-xs transition-all"
+                style={{
+                  background: "transparent",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  color: isLoadingAudio ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.45)",
+                  cursor: isLoadingAudio ? "not-allowed" : "pointer",
+                  opacity: isLoadingAudio ? 0.6 : 1,
+                }}
+              >
+                {isLoadingAudio ? (
+                  <span style={{ display: "inline-block", animation: "spin 1s linear infinite" }}>⟳</span>
+                ) : (
+                  <Upload size={11} />
+                )}
+                <span className="truncate">
+                  {isLoadingAudio ? "Loading..." : (userFileName ? userFileName : "Upload WAV / MP3")}
+                </span>
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".wav,.mp3,audio/*"
+                onChange={handleFileUpload}
+                className="hidden"
+                data-testid="input-audio-file"
+                disabled={isLoadingAudio}
+              />
+            </div>
+            {userFileName && !audioError && (
               <div className="text-xs mt-1" style={{ color: "hsl(192,87%,53%)", fontSize: 9, opacity: 0.7 }}>
                 Loaded · mixed into output
+              </div>
+            )}
+            {audioError && (
+              <div className="text-xs mt-1" style={{ color: "#ef4444", fontSize: 9 }}>
+                ✕ {audioError}
               </div>
             )}
           </Section>
