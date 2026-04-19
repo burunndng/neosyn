@@ -1,7 +1,8 @@
-import { useState, useCallback, createContext, useContext, createElement } from "react";
+import { useState, useCallback, useEffect, createContext, useContext, createElement } from "react";
 import type { ReactNode } from "react";
 import type { SynthParams, BilateralPattern, CarrierType, PanMode } from "../audio/AudioEngine";
 import { DEFAULT_PARAMS } from "../audio/AudioEngine";
+import { loadPersisted, savePersistedDebounced } from "../utils/persist";
 
 export type { BilateralPattern, CarrierType, PanMode, SynthParams };
 export { DEFAULT_PARAMS };
@@ -335,11 +336,21 @@ export interface SynthParamsContextValue {
 const SynthParamsContext = createContext<SynthParamsContextValue | null>(null);
 
 export function SynthParamsProvider({ children }: { children: ReactNode }) {
-  const [params, setParams] = useState<SynthParams>({ ...DEFAULT_PARAMS });
-  const [exportParams, setExportParams] = useState<ExportParams>({ ...DEFAULT_EXPORT_PARAMS });
+  const [params, setParams] = useState<SynthParams>(() =>
+    loadPersisted<SynthParams>("params", { ...DEFAULT_PARAMS }),
+  );
+  const [exportParams, setExportParams] = useState<ExportParams>(() =>
+    loadPersisted<ExportParams>("exportParams", { ...DEFAULT_EXPORT_PARAMS }),
+  );
   const [activePreset, setActivePreset] = useState<string | null>("theta");
   const [activeSessionPreset, setActiveSessionPreset] = useState<string | null>(null);
-  const [masterVolume, setMasterVolume] = useState(1.0);
+  const [masterVolume, setMasterVolume] = useState(() =>
+    loadPersisted<number>("masterVolume", 1.0),
+  );
+
+  useEffect(() => { savePersistedDebounced("params", params); }, [params]);
+  useEffect(() => { savePersistedDebounced("exportParams", exportParams); }, [exportParams]);
+  useEffect(() => { savePersistedDebounced("masterVolume", masterVolume); }, [masterVolume]);
 
   const updateParam = useCallback(<K extends keyof SynthParams>(key: K, value: SynthParams[K]) => {
     setParams(prev => ({ ...prev, [key]: value }));

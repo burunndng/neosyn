@@ -17,6 +17,7 @@ import { liveRecorder } from "../audio/LiveRecorder";
 import { audioEngine } from "../audio/AudioEngine";
 import type { SynthParams } from "../audio/AudioEngine";
 import { downloadBlob } from "../utils/wavExport";
+import { loadPersisted, savePersistedDebounced } from "../utils/persist";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -175,18 +176,46 @@ export function LiveModeProvider({
     if (v) void audioEngine.start();
     else audioEngine.stop();
   }, []);
-  const [bpm, setBpmState] = useState(masterClock.bpm);
-  const [lfo1, setLfo1] = useState<LFOState>(() => defaultLFOState("lfo1"));
-  const [lfo2, setLfo2] = useState<LFOState>(() => defaultLFOState("lfo2"));
-  const [seq, setSeq] = useState<SequencerState>(() => defaultSequencerState());
+  const [bpm, setBpmState] = useState(() => {
+    const stored = loadPersisted<number>("bpm", masterClock.bpm);
+    masterClock.setBpm(stored);
+    return stored;
+  });
+  const [lfo1, setLfo1] = useState<LFOState>(() =>
+    loadPersisted<LFOState>("lfo1", defaultLFOState("lfo1")),
+  );
+  const [lfo2, setLfo2] = useState<LFOState>(() =>
+    loadPersisted<LFOState>("lfo2", defaultLFOState("lfo2")),
+  );
+  const [seq, setSeq] = useState<SequencerState>(() =>
+    loadPersisted<SequencerState>("seq", defaultSequencerState()),
+  );
   const [seqStep, setSeqStep] = useState(0);
-  const [modRoutings, setModRoutings] = useState<ModRouting[]>([]);
-  const [macros, setMacros] = useState(defaultMacros);
-  const [fx, setFx] = useState<FXState>(DEFAULT_FX_STATE);
-  const [snapshots, setSnapshots] = useState<(PatchSnapshot | null)[]>(Array(8).fill(null));
-  const [morphTime, setMorphTime] = useState(2);
+  const [modRoutings, setModRoutings] = useState<ModRouting[]>(() =>
+    loadPersisted<ModRouting[]>("modRoutings", []),
+  );
+  const [macros, setMacros] = useState<[MacroConfig, MacroConfig, MacroConfig, MacroConfig]>(() =>
+    loadPersisted<[MacroConfig, MacroConfig, MacroConfig, MacroConfig]>("macros", defaultMacros()),
+  );
+  const [fx, setFx] = useState<FXState>(() =>
+    loadPersisted<FXState>("fx", DEFAULT_FX_STATE),
+  );
+  const [snapshots, setSnapshots] = useState<(PatchSnapshot | null)[]>(() =>
+    loadPersisted<(PatchSnapshot | null)[]>("snapshots", Array(8).fill(null)),
+  );
+  const [morphTime, setMorphTime] = useState(() => loadPersisted<number>("morphTime", 2));
   const [morphMode, setMorphMode] = useState(false);
   const [activeSnapshot, setActiveSnapshot] = useState<number | null>(null);
+
+  useEffect(() => { savePersistedDebounced("bpm", bpm); }, [bpm]);
+  useEffect(() => { savePersistedDebounced("lfo1", lfo1); }, [lfo1]);
+  useEffect(() => { savePersistedDebounced("lfo2", lfo2); }, [lfo2]);
+  useEffect(() => { savePersistedDebounced("seq", seq); }, [seq]);
+  useEffect(() => { savePersistedDebounced("modRoutings", modRoutings); }, [modRoutings]);
+  useEffect(() => { savePersistedDebounced("macros", macros); }, [macros]);
+  useEffect(() => { savePersistedDebounced("fx", fx); }, [fx]);
+  useEffect(() => { savePersistedDebounced("snapshots", snapshots); }, [snapshots]);
+  useEffect(() => { savePersistedDebounced("morphTime", morphTime); }, [morphTime]);
 
   // Refs for control loop (avoids stale closures)
   const lfo1Ref = useRef(new LFO(lfo1));
