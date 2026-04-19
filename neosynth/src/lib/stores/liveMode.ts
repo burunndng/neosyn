@@ -127,6 +127,7 @@ export interface LiveModeContextValue {
   addRouting: (r: Omit<ModRouting, "id">) => void;
   updateRouting: (id: string, patch: Partial<ModRouting>) => void;
   removeRouting: (id: string) => void;
+  clearAllRoutings: () => void;
 
   macros: [MacroConfig, MacroConfig, MacroConfig, MacroConfig];
   updateMacro: (idx: number, patch: Partial<MacroConfig>) => void;
@@ -355,6 +356,10 @@ export function LiveModeProvider({
     setModRoutings((prev) => prev.filter((r) => r.id !== id));
   }, []);
 
+  const clearAllRoutings = useCallback(() => {
+    setModRoutings([]);
+  }, []);
+
   const updateMacro = useCallback((idx: number, patch: Partial<MacroConfig>) => {
     setMacros((prev) => {
       const next = [...prev] as typeof prev;
@@ -473,7 +478,7 @@ export function LiveModeProvider({
     lfo1, updateLfo1,
     lfo2, updateLfo2,
     seq, updateSeq, seqStep,
-    modRoutings, addRouting, updateRouting, removeRouting,
+    modRoutings, addRouting, updateRouting, removeRouting, clearAllRoutings,
     macros, updateMacro, setMacroValue,
     getLfo1Phase, getLfo2Phase,
     fx, updateFx,

@@ -45,7 +45,7 @@ const DESTINATIONS: { id: ModDestId; label: string; category: string }[] = [
 ];
 
 export function ModMatrixPanel() {
-  const { modRoutings, addRouting, updateRouting, removeRouting } = useLiveMode();
+  const { modRoutings, addRouting, updateRouting, removeRouting, clearAllRoutings } = useLiveMode();
 
   const canAdd = modRoutings.length < 8;
 
@@ -63,31 +63,52 @@ export function ModMatrixPanel() {
         <span style={{ fontSize: 10, color: ACCENT, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>
           MOD MATRIX ({modRoutings.length}/8)
         </span>
-        {canAdd && (
-          <button
-            onClick={() =>
-              addRouting({
-                sourceId: "lfo1",
-                destId: "rate",
-                depth: 0.5,
-                bypass: false,
-              })
-            }
-            style={{
-              padding: "1px 6px",
-              borderRadius: 2,
-              fontSize: 9,
-              background: "rgba(34,211,238,0.12)",
-              border: `1px solid ${ACCENT}`,
-              color: ACCENT,
-              cursor: "pointer",
-              fontFamily: "'JetBrains Mono', monospace",
-              fontWeight: 600,
-            }}
-          >
-            + ADD
-          </button>
-        )}
+        <div className="flex gap-1">
+          {modRoutings.length > 0 && (
+            <button
+              onClick={clearAllRoutings}
+              title="Clear all routings"
+              style={{
+                padding: "1px 5px",
+                borderRadius: 2,
+                fontSize: 9,
+                background: "rgba(255,0,0,0.1)",
+                border: "1px solid rgba(255,0,0,0.3)",
+                color: "#ff6b6b",
+                cursor: "pointer",
+                fontFamily: "'JetBrains Mono', monospace",
+                fontWeight: 600,
+              }}
+            >
+              ✕ CLEAR
+            </button>
+          )}
+          {canAdd && (
+            <button
+              onClick={() =>
+                addRouting({
+                  sourceId: "lfo1",
+                  destId: "rate",
+                  depth: 0.5,
+                  bypass: false,
+                })
+              }
+              style={{
+                padding: "1px 6px",
+                borderRadius: 2,
+                fontSize: 9,
+                background: "rgba(34,211,238,0.12)",
+                border: `1px solid ${ACCENT}`,
+                color: ACCENT,
+                cursor: "pointer",
+                fontFamily: "'JetBrains Mono', monospace",
+                fontWeight: 600,
+              }}
+            >
+              + ADD
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Routing rows */}
