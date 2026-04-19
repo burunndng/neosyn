@@ -419,7 +419,45 @@ export function NeoSynth() {
           data-testid="right-panel"
         >
           {/* Layer A Carrier */}
-          <Section label="LAYER A CARRIER">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <div className="text-xs tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.2)", fontSize: 9, letterSpacing: "0.15em" }}>
+                LAYER A CARRIER
+              </div>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => {
+                    updateParam("layerAMuted", !params.layerAMuted);
+                    if (params.soloLayer === "A") updateParam("soloLayer", null);
+                  }}
+                  className="px-2 py-0.5 rounded text-xs transition-all"
+                  style={{
+                    background: params.layerAMuted ? "rgba(239,68,68,0.15)" : "transparent",
+                    border: `1px solid ${params.layerAMuted ? "rgba(239,68,68,0.5)" : "rgba(255,255,255,0.1)"}`,
+                    color: params.layerAMuted ? "#ef4444" : "rgba(255,255,255,0.4)",
+                    fontSize: 8,
+                    fontWeight: 600,
+                  }}
+                  title="Mute Layer A"
+                >
+                  {params.layerAMuted ? "✕" : "M"}
+                </button>
+                <button
+                  onClick={() => updateParam("soloLayer", params.soloLayer === "A" ? null : "A")}
+                  className="px-2 py-0.5 rounded text-xs transition-all"
+                  style={{
+                    background: params.soloLayer === "A" ? "rgba(34,211,238,0.15)" : "transparent",
+                    border: `1px solid ${params.soloLayer === "A" ? "rgba(34,211,238,0.5)" : "rgba(255,255,255,0.1)"}`,
+                    color: params.soloLayer === "A" ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.4)",
+                    fontSize: 8,
+                    fontWeight: 600,
+                  }}
+                  title="Solo Layer A"
+                >
+                  S
+                </button>
+              </div>
+            </div>
             <div className="flex flex-col gap-2">
               <div className="flex flex-col gap-1">
                 {(Object.keys(CARRIER_INFO) as CarrierType[]).map((c) => (
@@ -469,10 +507,51 @@ export function NeoSynth() {
                 testId="slider-layer-a-gain"
               />
             </div>
-          </Section>
+          </div>
 
           {/* Layer B Toggle */}
-          <Section label="LAYER B">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <div className="text-xs tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.2)", fontSize: 9, letterSpacing: "0.15em" }}>
+                LAYER B
+              </div>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => {
+                    updateParam("layerBMuted", !params.layerBMuted);
+                    if (params.soloLayer === "B") updateParam("soloLayer", null);
+                  }}
+                  className="px-2 py-0.5 rounded text-xs transition-all"
+                  style={{
+                    background: params.layerBMuted ? "rgba(239,68,68,0.15)" : "transparent",
+                    border: `1px solid ${params.layerBMuted ? "rgba(239,68,68,0.5)" : "rgba(255,255,255,0.1)"}`,
+                    color: params.layerBMuted ? "#ef4444" : "rgba(255,255,255,0.4)",
+                    fontSize: 8,
+                    fontWeight: 600,
+                  }}
+                  title="Mute Layer B"
+                  disabled={!params.layerBEnabled}
+                >
+                  {params.layerBMuted ? "✕" : "M"}
+                </button>
+                <button
+                  onClick={() => updateParam("soloLayer", params.soloLayer === "B" ? null : "B")}
+                  className="px-2 py-0.5 rounded text-xs transition-all"
+                  style={{
+                    background: params.soloLayer === "B" ? "rgba(34,211,238,0.15)" : "transparent",
+                    border: `1px solid ${params.soloLayer === "B" ? "rgba(34,211,238,0.5)" : "rgba(255,255,255,0.1)"}`,
+                    color: params.soloLayer === "B" ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.4)",
+                    fontSize: 8,
+                    fontWeight: 600,
+                    opacity: params.layerBEnabled ? 1 : 0.5,
+                  }}
+                  title="Solo Layer B"
+                  disabled={!params.layerBEnabled}
+                >
+                  S
+                </button>
+              </div>
+            </div>
             <button
               onClick={() => updateParam("layerBEnabled", !params.layerBEnabled)}
               className="w-full px-2 py-1.5 rounded text-xs transition-all"
@@ -535,7 +614,7 @@ export function NeoSynth() {
                 />
               </div>
             )}
-          </Section>
+          </div>
 
           {/* Pulse Envelope */}
           <Section label="ENVELOPE">

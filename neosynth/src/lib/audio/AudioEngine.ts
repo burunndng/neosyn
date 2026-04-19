@@ -20,11 +20,14 @@ export interface SynthParams {
   carrierFrequency: number;
   sampleUrl: string | null;
   layerAGain: number;
+  layerAMuted: boolean;
   layerBEnabled: boolean;
   layerBCarrierType: CarrierType;
   layerBCarrierFrequency: number;
   layerBGain: number;
+  layerBMuted: boolean;
   layerBSampleUrl: string | null;
+  soloLayer: "A" | "B" | null;
   attack: number;
   decay: number;
   dutyCycle: number;
@@ -47,11 +50,14 @@ export const DEFAULT_PARAMS: SynthParams = {
   carrierFrequency: 200,
   sampleUrl: null,
   layerAGain: 1,
+  layerAMuted: false,
   layerBEnabled: false,
   layerBCarrierType: "pink-noise",
   layerBCarrierFrequency: 200,
   layerBGain: 0.5,
+  layerBMuted: false,
   layerBSampleUrl: null,
+  soloLayer: null,
   attack: 0.05,
   decay: 0.1,
   dutyCycle: 0.5,
@@ -178,7 +184,8 @@ function buildGraph(
   const carrierA = createSynthCarrier(ctx, params.carrierType, params.carrierFrequency, sampleBufferA);
 
   const layerAGain = ctx.createGain();
-  layerAGain.gain.value = params.layerAGain;
+  const layerAEffectiveGain = params.soloLayer === "B" || params.layerAMuted ? 0 : params.layerAGain;
+  layerAGain.gain.value = layerAEffectiveGain;
 
   const envGain = ctx.createGain();
   envGain.gain.value = 0;
@@ -192,7 +199,8 @@ function buildGraph(
   if (params.layerBEnabled) {
     carrierB = createSynthCarrier(ctx, params.layerBCarrierType, params.layerBCarrierFrequency, sampleBufferB);
     layerBGainNode = ctx.createGain();
-    layerBGainNode.gain.value = params.layerBGain;
+    const layerBEffectiveGain = params.soloLayer === "A" || params.layerBMuted ? 0 : params.layerBGain;
+    layerBGainNode.gain.value = layerBEffectiveGain;
     carrierB.output.connect(layerBGainNode);
     layerBGainNode.connect(envGain);
   }
@@ -477,9 +485,13 @@ export class AudioEngine {
 
     this.graph.leftLevel.gain.setTargetAtTime(newParams.leftGain, this.ctx.currentTime, 0.01);
     this.graph.rightLevel.gain.setTargetAtTime(newParams.rightGain, this.ctx.currentTime, 0.01);
-    this.graph.layerAGain.gain.setTargetAtTime(newParams.layerAGain, this.ctx.currentTime, 0.01);
+
+    const layerAEffectiveGain = newParams.soloLayer === "B" || newParams.layerAMuted ? 0 : newParams.layerAGain;
+    this.graph.layerAGain.gain.setTargetAtTime(layerAEffectiveGain, this.ctx.currentTime, 0.01);
+
     if (this.graph.layerBGain) {
-      this.graph.layerBGain.gain.setTargetAtTime(newParams.layerBGain, this.ctx.currentTime, 0.01);
+      const layerBEffectiveGain = newParams.soloLayer === "A" || newParams.layerBMuted ? 0 : newParams.layerBGain;
+      this.graph.layerBGain.gain.setTargetAtTime(layerBEffectiveGain, this.ctx.currentTime, 0.01);
     }
 
     if (newParams.carrierFrequency !== prev.carrierFrequency) {
