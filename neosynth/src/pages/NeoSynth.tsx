@@ -44,6 +44,8 @@ export function NeoSynth() {
   const [isLoadingAudio, setIsLoadingAudio] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
   const [isDragOverAudio, setIsDragOverAudio] = useState(false);
+  const [exportPercent, setExportPercent] = useState(0);
+  const exportCancelledRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handlePlay = useCallback(() => {
@@ -52,23 +54,55 @@ export function NeoSynth() {
 
   const handleExport = useCallback(async () => {
     if (isExporting) return;
+    exportCancelledRef.current = false;
     setIsExporting(true);
-    setExportProgress("Rendering...");
+    setExportPercent(0);
+    setExportProgress("Rendering 0%");
+
+    // Approximate progress: offline render is ~5× real-time on modern hardware.
+    const dur = exportParams.durationSeconds;
+    const estimatedMs = Math.max(500, (dur / 5) * 1000);
+    const startedAt = performance.now();
+    const timer = setInterval(() => {
+      const elapsed = performance.now() - startedAt;
+      const pct = Math.min(95, Math.round((elapsed / estimatedMs) * 100));
+      setExportPercent(pct);
+      setExportProgress(`Rendering ${pct}%`);
+    }, 120);
+
     try {
       const buffer = await audioEngine.renderOffline(params, exportParams.durationSeconds, exportParams.bitDepth);
+      clearInterval(timer);
+      if (exportCancelledRef.current) {
+        setExportProgress("Cancelled");
+        setTimeout(() => setExportProgress(""), 1500);
+        return;
+      }
+      setExportPercent(98);
       setExportProgress("Encoding WAV...");
       const blob = encodeWav(buffer, exportParams.bitDepth);
-      const dur = exportParams.durationSeconds;
+      if (exportCancelledRef.current) {
+        setExportProgress("Cancelled");
+        setTimeout(() => setExportProgress(""), 1500);
+        return;
+      }
       const label = dur >= 60 ? `${dur / 60}min` : `${dur}s`;
       downloadBlob(blob, `neosynth-${params.pattern}-${params.rate}hz-${label}.wav`);
+      setExportPercent(100);
       setExportProgress("Done");
       setTimeout(() => setExportProgress(""), 2000);
     } catch (e) {
+      clearInterval(timer);
       setExportProgress("Error");
       setTimeout(() => setExportProgress(""), 3000);
+    } finally {
+      setIsExporting(false);
     }
-    setIsExporting(false);
   }, [params, exportParams, isExporting]);
+
+  const handleCancelExport = useCallback(() => {
+    exportCancelledRef.current = true;
+  }, []);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -512,22 +546,68 @@ export function NeoSynth() {
               )}
             </button>
 
-            <button
-              data-testid="button-export-wav"
-              onClick={handleExport}
-              disabled={isExporting}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded text-sm tracking-widest uppercase transition-all"
-              style={{
-                background: "transparent",
-                border: "1px solid rgba(255,255,255,0.1)",
-                color: isExporting ? "rgba(34,211,238,0.6)" : "rgba(255,255,255,0.5)",
-                letterSpacing: "0.12em",
-                cursor: isExporting ? "not-allowed" : "pointer",
-              }}
-            >
-              <Download size={13} strokeWidth={2} />
-              {isExporting ? exportProgress || "Rendering..." : "Export WAV"}
-            </button>
+            {isExporting ? (
+              <div
+                className="w-full flex flex-col gap-1.5 py-2 px-3 rounded"
+                style={{
+                  border: "1px solid rgba(34,211,238,0.3)",
+                  background: "rgba(34,211,238,0.05)",
+                }}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs tracking-widest uppercase" style={{ color: "hsl(192,87%,53%)", fontSize: 10, letterSpacing: "0.12em" }}>
+                    {exportProgress || "Rendering..."}
+                  </span>
+                  <button
+                    onClick={handleCancelExport}
+                    className="px-2 py-0.5 rounded"
+                    style={{
+                      background: "rgba(239,68,68,0.15)",
+                      border: "1px solid rgba(239,68,68,0.4)",
+                      color: "#ef4444",
+                      fontSize: 9,
+                      fontWeight: 600,
+                      letterSpacing: "0.08em",
+                    }}
+                  >
+                    CANCEL
+                  </button>
+                </div>
+                <div
+                  style={{
+                    height: 4,
+                    borderRadius: 2,
+                    background: "rgba(255,255,255,0.08)",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${exportPercent}%`,
+                      background: "hsl(192,87%,53%)",
+                      transition: "width 120ms linear",
+                    }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <button
+                data-testid="button-export-wav"
+                onClick={handleExport}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded text-sm tracking-widest uppercase transition-all"
+                style={{
+                  background: "transparent",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  color: "rgba(255,255,255,0.5)",
+                  letterSpacing: "0.12em",
+                  cursor: "pointer",
+                }}
+              >
+                <Download size={13} strokeWidth={2} />
+                Export WAV
+              </button>
+            )}
           </div>
 
           {/* Field legend */}
@@ -1092,10 +1172,29 @@ function SamplePicker({
   label: string;
   selectedUrl: string | null;
   onSelect: (path: string) => void;
-  onPreview: (path: string) => void;
+  onPreview: (path: string) => Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [loadingPath, setLoadingPath] = useState<string | null>(null);
+  const [playingPath, setPlayingPath] = useState<string | null>(null);
   const categories = Array.from(new Set(BUNDLED_SAMPLES.map(s => s.category)));
+
+  const handlePreviewClick = async (path: string) => {
+    if (playingPath === path) {
+      audioEngine.stopPreview();
+      setPlayingPath(null);
+      return;
+    }
+    setLoadingPath(path);
+    try {
+      await onPreview(path);
+      setPlayingPath(path);
+    } catch {
+      // ignore preview failures
+    } finally {
+      setLoadingPath(null);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-1">
@@ -1136,16 +1235,22 @@ function SamplePicker({
                     {sample.label}
                   </button>
                   <button
-                    onClick={() => onPreview(sample.path)}
+                    onClick={() => handlePreviewClick(sample.path)}
+                    disabled={loadingPath !== null && loadingPath !== sample.path}
                     className="px-1.5 py-1 rounded text-xs"
                     style={{
-                      background: "rgba(255,255,255,0.05)",
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      color: "rgba(255,255,255,0.4)",
+                      background: playingPath === sample.path ? "rgba(34,211,238,0.15)" : "rgba(255,255,255,0.05)",
+                      border: `1px solid ${playingPath === sample.path ? "rgba(34,211,238,0.4)" : "rgba(255,255,255,0.08)"}`,
+                      color: playingPath === sample.path ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.4)",
                       fontSize: 8,
+                      minWidth: 22,
+                      cursor: loadingPath !== null && loadingPath !== sample.path ? "not-allowed" : "pointer",
                     }}
+                    title={playingPath === sample.path ? "Stop preview" : "Preview sample"}
                   >
-                    ▶
+                    {loadingPath === sample.path ? (
+                      <span style={{ display: "inline-block", animation: "spin 1s linear infinite" }}>⟳</span>
+                    ) : playingPath === sample.path ? "■" : "▶"}
                   </button>
                 </div>
               ))}
