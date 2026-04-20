@@ -12,7 +12,7 @@ import {
   BUNDLED_SAMPLES,
   SESSION_PRESETS,
 } from "@/lib/stores/params";
-import type { BilateralPattern, CarrierType } from "@/lib/audio/AudioEngine";
+import type { BilateralPattern, CarrierType, SynthParams } from "@/lib/audio/AudioEngine";
 import { encodeWav, downloadBlob } from "@/lib/utils/wavExport";
 import { ChevronDown, ChevronUp, Play, Square, Download, Upload, Zap } from "lucide-react";
 import { useLiveMode } from "@/lib/stores/liveMode";
@@ -726,6 +726,25 @@ export function NeoSynth() {
                 onChange={(v) => updateParam("layerAGain", v)}
                 testId="slider-layer-a-gain"
               />
+
+              {/* Layer A trigger mode */}
+              <div className="flex gap-1">
+                {(["loop", "oneshot"] as const).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => updateParam("layerAMode", m)}
+                    className="flex-1 py-0.5 rounded transition-all"
+                    style={{
+                      fontSize: 9,
+                      background: params.layerAMode === m ? "rgba(34,211,238,0.12)" : "transparent",
+                      border: `1px solid ${params.layerAMode === m ? "rgba(34,211,238,0.5)" : "rgba(255,255,255,0.07)"}`,
+                      color: params.layerAMode === m ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.35)",
+                    }}
+                  >
+                    {m === "loop" ? "LOOP" : "SHOT"}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -832,6 +851,96 @@ export function NeoSynth() {
                   onChange={(v) => updateParam("layerBGain", v)}
                   testId="slider-layer-b-gain"
                 />
+
+                {/* Layer B Rhythm — independent rate + pattern */}
+                <div className="flex flex-col gap-2 pt-2" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                  <div className="text-xs tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.2)", fontSize: 10, letterSpacing: "0.15em" }}>
+                    B RHYTHM
+                  </div>
+
+                  {/* Trigger mode */}
+                  <div className="flex gap-1">
+                    {(["loop", "oneshot"] as const).map((m) => (
+                      <button
+                        key={m}
+                        onClick={() => updateParam("layerBMode", m)}
+                        className="flex-1 py-1 rounded text-xs transition-all"
+                        style={{
+                          background: params.layerBMode === m ? "rgba(34,211,238,0.12)" : "transparent",
+                          border: `1px solid ${params.layerBMode === m ? "rgba(34,211,238,0.5)" : "rgba(255,255,255,0.07)"}`,
+                          color: params.layerBMode === m ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.4)",
+                          fontSize: 10,
+                        }}
+                      >
+                        {m === "loop" ? "LOOP" : "SHOT"}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Independent rate or link to A */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => updateParam("layerBRate", params.layerBRate === null ? params.rate : null)}
+                      className="shrink-0 px-1.5 py-0.5 rounded text-xs"
+                      style={{
+                        fontSize: 9,
+                        background: params.layerBRate === null ? "rgba(34,211,238,0.08)" : "transparent",
+                        border: `1px solid ${params.layerBRate === null ? "rgba(34,211,238,0.35)" : "rgba(255,255,255,0.07)"}`,
+                        color: params.layerBRate === null ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.35)",
+                      }}
+                      title="Link / unlink Layer B rate from Layer A"
+                    >
+                      {params.layerBRate === null ? "= A" : "✎"}
+                    </button>
+                    {params.layerBRate !== null && (
+                      <div className="flex-1">
+                        <SliderRow
+                          label="RATE"
+                          value={params.layerBRate}
+                          display={`${params.layerBRate.toFixed(1)} Hz`}
+                          min={0.5} max={30} step={0.1}
+                          onChange={(v) => updateParam("layerBRate", v)}
+                          testId="slider-layer-b-rate"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Independent pattern or follow A */}
+                  <div className="flex flex-col gap-1">
+                    <button
+                      onClick={() => updateParam("layerBPattern", params.layerBPattern === null ? params.pattern : null)}
+                      className="text-xs py-0.5 px-2 rounded"
+                      style={{
+                        fontSize: 9,
+                        background: params.layerBPattern === null ? "rgba(34,211,238,0.08)" : "transparent",
+                        border: `1px solid ${params.layerBPattern === null ? "rgba(34,211,238,0.35)" : "rgba(255,255,255,0.07)"}`,
+                        color: params.layerBPattern === null ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.35)",
+                      }}
+                    >
+                      {params.layerBPattern === null ? "PATTERN: ↑ same as A" : `PATTERN: ${params.layerBPattern}`}
+                    </button>
+                    {params.layerBPattern !== null && (
+                      <div className="flex flex-col gap-0.5">
+                        {(Object.keys(PATTERN_INFO) as BilateralPattern[]).map((p) => (
+                          <button
+                            key={p}
+                            onClick={() => updateParam("layerBPattern", p as SynthParams["layerBPattern"])}
+                            className="text-left px-1.5 py-0.5 rounded transition-all"
+                            style={{
+                              fontSize: 9,
+                              background: params.layerBPattern === p ? "rgba(34,211,238,0.1)" : "transparent",
+                              border: `1px solid ${params.layerBPattern === p ? "rgba(34,211,238,0.4)" : "rgba(255,255,255,0.04)"}`,
+                              color: params.layerBPattern === p ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.5)",
+                            }}
+                          >
+                            {PATTERN_INFO[p].label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
           </div>

@@ -3,9 +3,11 @@ import type { ReactNode } from "react";
 import type { SynthParams, BilateralPattern, CarrierType, PanMode } from "../audio/AudioEngine";
 import { DEFAULT_PARAMS } from "../audio/AudioEngine";
 import { loadPersisted, savePersistedDebounced } from "../utils/persist";
+import type { ClockDivision } from "../audio/MasterClock";
+import { CLOCK_DIVISIONS } from "../audio/MasterClock";
 
-export type { BilateralPattern, CarrierType, PanMode, SynthParams };
-export { DEFAULT_PARAMS };
+export type { BilateralPattern, CarrierType, PanMode, SynthParams, ClockDivision };
+export { DEFAULT_PARAMS, CLOCK_DIVISIONS };
 
 export interface RatePreset {
   name: string;
