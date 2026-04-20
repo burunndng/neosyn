@@ -181,6 +181,61 @@
   animation: led-blink 0.6s ease-in-out infinite;
 }
 
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Numeric read-outs get tabular-nums so digits don't jitter as they change */
+.tabular-nums,
+[data-numeric="true"] {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Focus ring for interactive surfaces — WCAG contrast at 0.55 alpha */
+.focus-ring:focus-visible {
+  outline: 2px solid hsl(192 87% 53% / 0.55);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* Dashed drop-target highlight when dragging audio */
+.drop-target-active {
+  background-color: hsl(192 87% 53% / 0.08) !important;
+  border-color: hsl(192 87% 53%) !important;
+}
+
+/* Responsive: stack 3-column classic layout below 900px */
+@media (max-width: 900px) {
+  .neosynth-columns {
+    flex-direction: column !important;
+    overflow-y: auto;
+  }
+  .neosynth-aside {
+    width: 100% !important;
+    max-height: none !important;
+    border-right: none !important;
+    border-left: none !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .neosynth-center {
+    border-left: none !important;
+    border-right: none !important;
+    min-height: 380px;
+  }
+}
+
+/* Responsive: stack LFO + Sequencer vertically on narrower live-mode layouts */
+@media (max-width: 1100px) {
+  .live-row-modulation {
+    flex-direction: column !important;
+  }
+  .live-row-modulation > * {
+    width: 100% !important;
+  }
+}
+
 @layer base {
   * {
     @apply border-border;
@@ -189,6 +244,22 @@
   body {
     @apply font-mono antialiased bg-background text-foreground;
     background-color: #06070b;
+  }
+
+  button {
+    cursor: pointer;
+    transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+  button:focus-visible,
+  [role="slider"]:focus-visible,
+  [role="button"]:focus-visible,
+  a:focus-visible,
+  summary:focus-visible {
+    outline: 2px solid hsl(192 87% 53% / 0.55);
+    outline-offset: 2px;
   }
 
   html, body, #root {

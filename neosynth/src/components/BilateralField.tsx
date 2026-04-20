@@ -13,6 +13,29 @@ export function BilateralField({ isPlaying, rate, pattern }: BilateralFieldProps
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
   const startTimeRef = useRef<number>(0);
+  const sizeRef = useRef<{ w: number; h: number }>({ w: 480, h: 220 });
+
+  // DPR-aware sizing so the canvas stays crisp on retina screens
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const resize = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 3);
+      const rect = canvas.getBoundingClientRect();
+      const w = Math.max(1, Math.round(rect.width));
+      const h = Math.max(1, Math.round(rect.height));
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+      sizeRef.current = { w, h };
+      const ctx = canvas.getContext("2d");
+      if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas);
+    window.addEventListener("resize", resize);
+    return () => { ro.disconnect(); window.removeEventListener("resize", resize); };
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -20,8 +43,8 @@ export function BilateralField({ isPlaying, rate, pattern }: BilateralFieldProps
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const W = canvas.width;
-    const H = canvas.height;
+    const W = sizeRef.current.w;
+    const H = sizeRef.current.h;
     const cx = W / 2;
     const cy = H / 2;
 
@@ -221,8 +244,6 @@ export function BilateralField({ isPlaying, rate, pattern }: BilateralFieldProps
   return (
     <canvas
       ref={canvasRef}
-      width={480}
-      height={220}
       data-testid="bilateral-field-canvas"
       className="w-full h-full"
       style={{ display: "block" }}

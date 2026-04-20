@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { Play, Square, Circle, StopCircle } from "lucide-react";
 import { useLiveMode } from "@/lib/stores/liveMode";
-import { audioEngine } from "@/lib/audio/AudioEngine";
+import { useSynthParams } from "@/lib/stores/params";
 
 const ACCENT = "hsl(192,87%,53%)";
 const DIM = "rgba(255,255,255,0.5)";
@@ -12,15 +12,10 @@ export function ClockPanel() {
     isPlaying, setIsPlaying,
     isRecording, startRecording, stopRecording,
   } = useLiveMode();
+  const { masterVolume, setMasterVolume } = useSynthParams();
 
-  const handlePlay = useCallback(async () => {
-    if (isPlaying) {
-      audioEngine.stop();
-      setIsPlaying(false);
-    } else {
-      await audioEngine.start();
-      setIsPlaying(true);
-    }
+  const handlePlay = useCallback(() => {
+    setIsPlaying(!isPlaying);
   }, [isPlaying, setIsPlaying]);
 
   const handleBpmInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -73,7 +68,7 @@ export function ClockPanel() {
       {/* BPM display + tap */}
       <div className="flex items-center gap-3">
         <div className="flex flex-col">
-          <span style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.1em" }}>BPM</span>
+          <span style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.1em" }}>BPM</span>
           <input
             type="number"
             min={20} max={300} step={1}
@@ -110,7 +105,7 @@ export function ClockPanel() {
         </button>
 
         <div className="flex flex-col items-center">
-          <span style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", textTransform: "uppercase" }}>Hz</span>
+          <span style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", textTransform: "uppercase" }}>Hz</span>
           <span style={{ fontSize: 14, color: "rgba(255,255,255,0.55)", fontFamily: "'JetBrains Mono', monospace" }}>
             {(bpm / 60).toFixed(2)}
           </span>
@@ -121,7 +116,7 @@ export function ClockPanel() {
 
       {/* BPM slider */}
       <div className="flex items-center gap-2 flex-1 max-w-48">
-        <span style={{ fontSize: 9, color: "rgba(255,255,255,0.3)" }}>20</span>
+        <span style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>20</span>
         <input
           type="range"
           min={20} max={300} step={1}
@@ -129,7 +124,25 @@ export function ClockPanel() {
           onChange={handleBpmInput}
           style={{ flex: 1, accentColor: ACCENT }}
         />
-        <span style={{ fontSize: 9, color: "rgba(255,255,255,0.3)" }}>300</span>
+        <span style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>300</span>
+      </div>
+
+      <div style={{ width: 1, height: 36, background: "rgba(255,255,255,0.08)" }} />
+
+      {/* Master Volume */}
+      <div className="flex items-center gap-2">
+        <span style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", textTransform: "uppercase" }}>VOL</span>
+        <input
+          type="range"
+          min={0} max={1} step={0.05}
+          value={masterVolume}
+          onChange={(e) => setMasterVolume(parseFloat(e.target.value))}
+          style={{ width: 80, accentColor: ACCENT }}
+          title="Master Volume"
+        />
+        <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", minWidth: 22 }}>
+          {Math.round(masterVolume * 100)}%
+        </span>
       </div>
 
       {isRecording && (

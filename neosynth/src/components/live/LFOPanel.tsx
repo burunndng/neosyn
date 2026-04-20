@@ -13,24 +13,12 @@ function LFOShapeIcon({ shape }: { shape: string }) {
     sine:     "M1,8 Q4,1 7,8 Q10,15 13,8 Q16,1 19,8",
     triangle: "M1,14 L5,2 L10,14 L15,2 L19,14",
     saw:      "M1,14 L10,2 L10,14 L19,2",
-    square:   "M1,14 L1,2 L10,2 L10,14 L10,2 L19,2 L19,14",
+    square:   "M1,12 L1,4 L7,4 L7,12 L13,12 L13,4 L19,4",
     "s&h":    "M1,14 L5,14 L5,6 L9,6 L9,10 L13,10 L13,3 L17,3 L17,14",
   };
   return (
     <svg width={20} height={16} viewBox="0 0 20 16" fill="none">
       <path d={paths[shape] ?? paths.sine} stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function LFOPhaseMeter({ phase }: { phase: number }) {
-  const r = 7;
-  const x = 10 + r * Math.sin(phase * 2 * Math.PI);
-  const y = 10 - r * Math.cos(phase * 2 * Math.PI);
-  return (
-    <svg width={20} height={20} style={{ opacity: 0.8 }}>
-      <circle cx={10} cy={10} r={r} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth={1.5} />
-      <circle cx={x} cy={y} r={2} fill={ACCENT} />
     </svg>
   );
 }
@@ -43,16 +31,15 @@ interface LFOUnitProps {
 }
 
 function LFOUnit({ state, phaseFn, update, label }: LFOUnitProps) {
-  const phaseRef = useRef(0);
   const phaseMeterRef = useRef<SVGCircleElement>(null);
 
   useEffect(() => {
     let raf: number;
     const loop = () => {
-      phaseRef.current = phaseFn();
+      const phase = phaseFn();
       if (phaseMeterRef.current) {
         const r = 7;
-        const angle = phaseRef.current * 2 * Math.PI;
+        const angle = phase * 2 * Math.PI;
         phaseMeterRef.current.setAttribute("cx", String(10 + r * Math.sin(angle)));
         phaseMeterRef.current.setAttribute("cy", String(10 - r * Math.cos(angle)));
       }
@@ -81,11 +68,11 @@ function LFOUnit({ state, phaseFn, update, label }: LFOUnitProps) {
               background: state.enabled ? "rgba(34,211,238,0.15)" : "rgba(255,255,255,0.06)",
               border: `1px solid ${state.enabled ? ACCENT : "rgba(255,255,255,0.12)"}`,
               color: state.enabled ? ACCENT : "rgba(255,255,255,0.3)",
-              fontSize: 8, cursor: "pointer",
+              fontSize: 10, cursor: "pointer",
             }}
             title="Enable/disable"
           >
-            {state.enabled ? "ON" : "OF"}
+            {state.enabled ? "ON" : "OFF"}
           </button>
         </div>
       </div>
@@ -126,7 +113,7 @@ function LFOUnit({ state, phaseFn, update, label }: LFOUnitProps) {
               <div style={{ width: 44, height: 44, borderRadius: "50%", background: "rgba(34,211,238,0.08)", border: `1px solid ${ACCENT}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <span style={{ fontSize: 10, color: ACCENT, fontFamily: "'JetBrains Mono', monospace" }}>{state.syncDiv}</span>
               </div>
-              <span style={{ fontSize: 8, color: "rgba(255,255,255,0.35)", textTransform: "uppercase" }}>RATE</span>
+              <span style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", textTransform: "uppercase" }}>RATE</span>
             </div>
           )}
         </div>
@@ -143,7 +130,7 @@ function LFOUnit({ state, phaseFn, update, label }: LFOUnitProps) {
         <button
           onClick={() => update({ syncDiv: null })}
           style={{
-            padding: "2px 5px", borderRadius: 3, fontSize: 8,
+            padding: "2px 5px", borderRadius: 3, fontSize: 10,
             background: state.syncDiv === null ? "rgba(34,211,238,0.12)" : "transparent",
             border: `1px solid ${state.syncDiv === null ? ACCENT : "rgba(255,255,255,0.07)"}`,
             color: state.syncDiv === null ? ACCENT : "rgba(255,255,255,0.3)",
@@ -157,7 +144,7 @@ function LFOUnit({ state, phaseFn, update, label }: LFOUnitProps) {
             key={d}
             onClick={() => update({ syncDiv: d as ClockDivision })}
             style={{
-              padding: "2px 5px", borderRadius: 3, fontSize: 8,
+              padding: "2px 5px", borderRadius: 3, fontSize: 10,
               background: state.syncDiv === d ? "rgba(34,211,238,0.12)" : "transparent",
               border: `1px solid ${state.syncDiv === d ? ACCENT : "rgba(255,255,255,0.07)"}`,
               color: state.syncDiv === d ? ACCENT : "rgba(255,255,255,0.3)",
@@ -173,7 +160,7 @@ function LFOUnit({ state, phaseFn, update, label }: LFOUnitProps) {
       <button
         onClick={() => update({ bipolar: !state.bipolar })}
         style={{
-          padding: "2px 0", borderRadius: 3, fontSize: 8, width: "100%",
+          padding: "2px 0", borderRadius: 3, fontSize: 10, width: "100%",
           background: state.bipolar ? "rgba(34,211,238,0.08)" : "transparent",
           border: `1px solid ${state.bipolar ? ACCENT : "rgba(255,255,255,0.07)"}`,
           color: state.bipolar ? ACCENT : "rgba(255,255,255,0.3)",
@@ -187,24 +174,19 @@ function LFOUnit({ state, phaseFn, update, label }: LFOUnitProps) {
 }
 
 export function LFOPanel() {
-  const { lfo1, updateLfo1, lfo2, updateLfo2 } = useLiveMode();
-
-  // We expose getters for phase animation — instances live in the store refs,
-  // but we can approximate with local RAF since phase is visual only.
-  const phaseA = useRef(0);
-  const phaseB = useRef(0);
+  const { lfo1, updateLfo1, lfo2, updateLfo2, getLfo1Phase, getLfo2Phase } = useLiveMode();
 
   return (
     <div className="flex gap-3">
       <LFOUnit
         state={lfo1}
-        phaseFn={() => phaseA.current}
+        phaseFn={getLfo1Phase}
         update={updateLfo1}
         label="LFO 1"
       />
       <LFOUnit
         state={lfo2}
-        phaseFn={() => phaseB.current}
+        phaseFn={getLfo2Phase}
         update={updateLfo2}
         label="LFO 2"
       />

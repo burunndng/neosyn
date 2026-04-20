@@ -3,6 +3,7 @@ import type { ReactNode, ChangeEvent } from "react";
 import { Slider } from "@/components/ui/slider";
 import { BilateralField } from "@/components/BilateralField";
 import { audioEngine } from "@/lib/audio/AudioEngine";
+import { CLOCK_DIVISIONS } from "@/lib/audio/MasterClock";
 import {
   useSynthParams,
   RATE_PRESETS,
@@ -16,10 +17,19 @@ import { encodeWav, downloadBlob } from "@/lib/utils/wavExport";
 import { ChevronDown, ChevronUp, Play, Square, Download, Upload, Zap } from "lucide-react";
 import { useLiveMode } from "@/lib/stores/liveMode";
 
+const DIVISION_MULTIPLIERS: Record<string, number> = {
+  "1/1":  0.25,
+  "1/2":  0.5,
+  "1/4":  1,
+  "1/8":  2,
+  "1/16": 4,
+  "1/4T": 4 / 3,
+  "1/8T": 8 / 3,
+};
+
 export function NeoSynth() {
-  const { params, updateParam, exportParams, updateExportParam, activePreset, applyRatePreset, activeSessionPreset, applySessionPreset } = useSynthParams();
-  const { isLiveMode, setIsLiveMode } = useLiveMode();
-  const [isPlaying, setIsPlaying] = useState(false);
+  const { params, updateParam, exportParams, updateExportParam, activePreset, applyRatePreset, activeSessionPreset, applySessionPreset, masterVolume, setMasterVolume } = useSynthParams();
+  const { isLiveMode, setIsLiveMode, isPlaying, setIsPlaying } = useLiveMode();
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState("");
   const [userFileName, setUserFileName] = useState<string | null>(null);
@@ -27,47 +37,160 @@ export function NeoSynth() {
   const [showEducation, setShowEducation] = useState(false);
   const [showSamples, setShowSamples] = useState(false);
   const [showSessionPresets, setShowSessionPresets] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  const [useBpmSync, setUseBpmSync] = useState(false);
+  const [bpmValue, setBpmValue] = useState(120);
+  const [bpmDivision, setBpmDivision] = useState<string>("1/4");
+  const [isLoadingAudio, setIsLoadingAudio] = useState(false);
+  const [audioError, setAudioError] = useState<string | null>(null);
+  const [isDragOverAudio, setIsDragOverAudio] = useState(false);
+  const [exportPercent, setExportPercent] = useState(0);
+  const exportCancelledRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handlePlay = useCallback(() => {
+    setIsPlaying(!isPlaying);
+  }, [isPlaying, setIsPlaying]);
+
+  const handleExport = useCallback(async () => {
+    if (isExporting) return;
+    exportCancelledRef.current = false;
+    setIsExporting(true);
+    setExportPercent(0);
+    setExportProgress("Rendering 0%");
+
+    // Approximate progress: offline render is ~5× real-time on modern hardware.
+    const dur = exportParams.durationSeconds;
+    const estimatedMs = Math.max(500, (dur / 5) * 1000);
+    const startedAt = performance.now();
+    const timer = setInterval(() => {
+      const elapsed = performance.now() - startedAt;
+      const pct = Math.min(95, Math.round((elapsed / estimatedMs) * 100));
+      setExportPercent(pct);
+      setExportProgress(`Rendering ${pct}%`);
+    }, 120);
+
+    try {
+      const buffer = await audioEngine.renderOffline(params, exportParams.durationSeconds, exportParams.bitDepth);
+      clearInterval(timer);
+      if (exportCancelledRef.current) {
+        setExportProgress("Cancelled");
+        setTimeout(() => setExportProgress(""), 1500);
+        return;
+      }
+      setExportPercent(98);
+      setExportProgress("Encoding WAV...");
+      const blob = encodeWav(buffer, exportParams.bitDepth);
+      if (exportCancelledRef.current) {
+        setExportProgress("Cancelled");
+        setTimeout(() => setExportProgress(""), 1500);
+        return;
+      }
+      const label = dur >= 60 ? `${dur / 60}min` : `${dur}s`;
+      downloadBlob(blob, `neosynth-${params.pattern}-${params.rate}hz-${label}.wav`);
+      setExportPercent(100);
+      setExportProgress("Done");
+      setTimeout(() => setExportProgress(""), 2000);
+    } catch (e) {
+      clearInterval(timer);
+      setExportProgress("Error");
+      setTimeout(() => setExportProgress(""), 3000);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [params, exportParams, isExporting]);
+
+  const handleCancelExport = useCallback(() => {
+    exportCancelledRef.current = true;
+  }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target && target.isContentEditable)
+      ) {
+        return;
+      }
+      switch (e.key) {
+        case " ":
+          e.preventDefault();
+          setIsPlaying(!isPlaying);
+          break;
+        case "e":
+        case "E":
+          e.preventDefault();
+          handleExport();
+          break;
+        case "l":
+        case "L":
+          e.preventDefault();
+          setIsLiveMode(!isLiveMode);
+          break;
+        case "?":
+          e.preventDefault();
+          setShowHelp(!showHelp);
+          break;
+        default:
+          break;
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isPlaying, setIsPlaying, isLiveMode, setIsLiveMode, showHelp, handleExport]);
 
   useEffect(() => {
     audioEngine.updateParams(params);
   }, [params]);
 
-  const handlePlay = useCallback(async () => {
-    if (isPlaying) {
-      audioEngine.stop();
-      setIsPlaying(false);
-    } else {
-      await audioEngine.start();
-      setIsPlaying(true);
-    }
-  }, [isPlaying]);
-
-  const handleExport = useCallback(async () => {
-    if (isExporting) return;
-    setIsExporting(true);
-    setExportProgress("Rendering...");
-    try {
-      const buffer = await audioEngine.renderOffline(params, exportParams.durationSeconds, exportParams.bitDepth);
-      setExportProgress("Encoding WAV...");
-      const blob = encodeWav(buffer, exportParams.bitDepth);
-      const dur = exportParams.durationSeconds;
-      const label = dur >= 60 ? `${dur / 60}min` : `${dur}s`;
-      downloadBlob(blob, `neosynth-${params.pattern}-${params.rate}hz-${label}.wav`);
-      setExportProgress("Done");
-      setTimeout(() => setExportProgress(""), 2000);
-    } catch (e) {
-      setExportProgress("Error");
-      setTimeout(() => setExportProgress(""), 3000);
-    }
-    setIsExporting(false);
-  }, [params, exportParams, isExporting]);
+  useEffect(() => {
+    audioEngine.setMasterVolume(masterVolume);
+  }, [masterVolume]);
 
   const handleFileUpload = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setUserFileName(file.name);
-    await audioEngine.setUserAudio(file);
+    setAudioError(null);
+    setIsLoadingAudio(true);
+    try {
+      await audioEngine.setUserAudio(file);
+      setUserFileName(file.name);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to load audio file";
+      setAudioError(msg);
+      setTimeout(() => setAudioError(null), 3000);
+    } finally {
+      setIsLoadingAudio(false);
+    }
+  }, []);
+
+  const handleAudioDrop = useCallback(async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOverAudio(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("audio/") && !["audio/wav", "audio/mp3", "audio/mpeg"].includes(file.type)) {
+      setAudioError("Please drop an audio file (WAV, MP3, etc.)");
+      setTimeout(() => setAudioError(null), 3000);
+      return;
+    }
+    setAudioError(null);
+    setIsLoadingAudio(true);
+    try {
+      await audioEngine.setUserAudio(file);
+      setUserFileName(file.name);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to load audio file";
+      setAudioError(msg);
+      setTimeout(() => setAudioError(null), 3000);
+    } finally {
+      setIsLoadingAudio(false);
+    }
   }, []);
 
   const handleSampleSelect = useCallback(async (path: string, layer: "A" | "B") => {
@@ -124,12 +247,31 @@ export function NeoSynth() {
         <span className="text-xs" style={{ color: "rgba(255,255,255,0.38)", letterSpacing: "0.06em" }}>
           Bilateral Isochronic Audio Synthesizer
         </span>
-        <div className="ml-auto flex gap-2 items-center">
+        <div className="ml-auto flex gap-3 items-center">
           {isPlaying && (
             <span className="text-xs" style={{ color: "hsl(192,87%,53%)", opacity: 0.9 }}>
               {params.rate.toFixed(1)} Hz
             </span>
           )}
+          <div className="flex items-center gap-2">
+            <span style={{ fontSize: 10, color: "rgba(255,255,255,0.3)" }}>VOL</span>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={masterVolume}
+              onChange={(e) => setMasterVolume(parseFloat(e.target.value))}
+              style={{
+                width: 80,
+                accentColor: "hsl(192,87%,53%)",
+              }}
+              title={`Master Volume: ${Math.round(masterVolume * 100)}%`}
+            />
+            <span style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", minWidth: 20 }}>
+              {Math.round(masterVolume * 100)}%
+            </span>
+          </div>
           <button
             onClick={() => setIsLiveMode(!isLiveMode)}
             className="p-1.5 rounded transition-all"
@@ -139,6 +281,8 @@ export function NeoSynth() {
               color: isLiveMode ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.4)",
             }}
             title="Toggle Live Modular Mode (⚡)"
+            aria-label="Toggle Live Modular Mode"
+            aria-pressed={isLiveMode}
           >
             <Zap size={14} />
           </button>
@@ -146,11 +290,11 @@ export function NeoSynth() {
       </header>
 
       {/* Main three-column layout */}
-      <div className="flex flex-1 gap-0 overflow-hidden" style={{ minHeight: 0 }}>
+      <div className="flex flex-1 gap-0 overflow-hidden neosynth-columns" style={{ minHeight: 0 }}>
 
         {/* LEFT COLUMN — Pattern & Carrier */}
         <aside
-          className="flex flex-col gap-4 p-4 overflow-y-auto shrink-0"
+          className="flex flex-col gap-4 p-4 overflow-y-auto shrink-0 neosynth-aside neosynth-aside-left"
           style={{
             width: 220,
             background: "#0e1016",
@@ -243,7 +387,7 @@ export function NeoSynth() {
                       {preset.minRate}–{preset.maxRate} Hz
                     </span>
                   </div>
-                  <div style={{ color: "rgba(255,255,255,0.25)", fontSize: 9, lineHeight: 1.3 }}>
+                  <div style={{ color: "rgba(255,255,255,0.25)", fontSize: 11, lineHeight: 1.3 }}>
                     {preset.description.split("·")[1]?.trim()}
                   </div>
                 </button>
@@ -251,23 +395,109 @@ export function NeoSynth() {
             </div>
           </Section>
 
-          {/* Rate Slider */}
-          <Section label={`RATE — ${params.rate.toFixed(2)} HZ`}>
-            <Slider
-              min={0.5}
-              max={30}
-              step={0.1}
-              value={[params.rate]}
-              onValueChange={([v]) => updateParam("rate", v)}
-              data-testid="slider-rate"
-              className="mt-1"
-            />
-          </Section>
+          {/* Rate Slider / BPM Sync */}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <div className="text-xs tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.2)", fontSize: 11, letterSpacing: "0.15em" }}>
+                RATE — {params.rate.toFixed(2)} HZ
+              </div>
+              <button
+                onClick={() => setUseBpmSync(!useBpmSync)}
+                className="px-2 py-0.5 rounded text-xs transition-all"
+                style={{
+                  background: useBpmSync ? "rgba(34,211,238,0.15)" : "transparent",
+                  border: `1px solid ${useBpmSync ? "rgba(34,211,238,0.5)" : "rgba(255,255,255,0.1)"}`,
+                  color: useBpmSync ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.4)",
+                  fontSize: 10,
+                  fontWeight: 600,
+                }}
+                title="Toggle BPM sync mode"
+              >
+                {useBpmSync ? "SYNC" : "FREE"}
+              </button>
+            </div>
+
+            {useBpmSync ? (
+              <div className="flex flex-col gap-2">
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label style={{ display: "block", fontSize: 10, color: "rgba(255,255,255,0.3)", marginBottom: 4 }}>
+                      BPM
+                    </label>
+                    <input
+                      type="number"
+                      min={20} max={300} step={1}
+                      value={bpmValue}
+                      onChange={(e) => {
+                        const bpm = parseFloat(e.target.value);
+                        if (!isNaN(bpm)) {
+                          setBpmValue(bpm);
+                          const hz = (bpm / 60) * DIVISION_MULTIPLIERS[bpmDivision];
+                          updateParam("rate", hz);
+                        }
+                      }}
+                      style={{
+                        width: "100%",
+                        padding: "4px 6px",
+                        borderRadius: 3,
+                        border: "1px solid rgba(34,211,238,0.3)",
+                        background: "rgba(34,211,238,0.05)",
+                        color: "hsl(192,87%,53%)",
+                        fontSize: 10,
+                        fontFamily: "'JetBrains Mono', monospace",
+                        fontWeight: 600,
+                      }}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label style={{ display: "block", fontSize: 10, color: "rgba(255,255,255,0.3)", marginBottom: 4 }}>
+                      DIV
+                    </label>
+                    <select
+                      value={bpmDivision}
+                      onChange={(e) => {
+                        const div = e.target.value;
+                        setBpmDivision(div);
+                        const hz = (bpmValue / 60) * DIVISION_MULTIPLIERS[div];
+                        updateParam("rate", hz);
+                      }}
+                      style={{
+                        width: "100%",
+                        padding: "4px 6px",
+                        borderRadius: 3,
+                        border: "1px solid rgba(34,211,238,0.3)",
+                        background: "rgba(34,211,238,0.05)",
+                        color: "hsl(192,87%,53%)",
+                        fontSize: 11,
+                        fontFamily: "'JetBrains Mono', monospace",
+                      }}
+                    >
+                      {CLOCK_DIVISIONS.map((div) => (
+                        <option key={div} value={div}>
+                          {div}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <Slider
+                min={0.5}
+                max={30}
+                step={0.1}
+                value={[params.rate]}
+                onValueChange={([v]) => updateParam("rate", v)}
+                data-testid="slider-rate"
+                className="mt-1"
+              />
+            )}
+          </div>
         </aside>
 
         {/* CENTER COLUMN — Bilateral Field + Transport */}
         <main
-          className="flex flex-col flex-1 items-center justify-between p-5 gap-4"
+          className="flex flex-col flex-1 items-center justify-between p-5 gap-4 neosynth-center"
           style={{
             background: "#08090e",
             borderLeft: "1px solid rgba(34,211,238,0.15)",
@@ -318,22 +548,68 @@ export function NeoSynth() {
               )}
             </button>
 
-            <button
-              data-testid="button-export-wav"
-              onClick={handleExport}
-              disabled={isExporting}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded text-sm tracking-widest uppercase transition-all"
-              style={{
-                background: "transparent",
-                border: "1px solid rgba(255,255,255,0.1)",
-                color: isExporting ? "rgba(34,211,238,0.6)" : "rgba(255,255,255,0.5)",
-                letterSpacing: "0.12em",
-                cursor: isExporting ? "not-allowed" : "pointer",
-              }}
-            >
-              <Download size={13} strokeWidth={2} />
-              {isExporting ? exportProgress || "Rendering..." : "Export WAV"}
-            </button>
+            {isExporting ? (
+              <div
+                className="w-full flex flex-col gap-1.5 py-2 px-3 rounded"
+                style={{
+                  border: "1px solid rgba(34,211,238,0.3)",
+                  background: "rgba(34,211,238,0.05)",
+                }}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs tracking-widest uppercase" style={{ color: "hsl(192,87%,53%)", fontSize: 10, letterSpacing: "0.12em" }}>
+                    {exportProgress || "Rendering..."}
+                  </span>
+                  <button
+                    onClick={handleCancelExport}
+                    className="px-2 py-0.5 rounded"
+                    style={{
+                      background: "rgba(239,68,68,0.15)",
+                      border: "1px solid rgba(239,68,68,0.4)",
+                      color: "#ef4444",
+                      fontSize: 11,
+                      fontWeight: 600,
+                      letterSpacing: "0.08em",
+                    }}
+                  >
+                    CANCEL
+                  </button>
+                </div>
+                <div
+                  style={{
+                    height: 4,
+                    borderRadius: 2,
+                    background: "rgba(255,255,255,0.08)",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${exportPercent}%`,
+                      background: "hsl(192,87%,53%)",
+                      transition: "width 120ms linear",
+                    }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <button
+                data-testid="button-export-wav"
+                onClick={handleExport}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded text-sm tracking-widest uppercase transition-all"
+                style={{
+                  background: "transparent",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  color: "rgba(255,255,255,0.5)",
+                  letterSpacing: "0.12em",
+                  cursor: "pointer",
+                }}
+              >
+                <Download size={13} strokeWidth={2} />
+                Export WAV
+              </button>
+            )}
           </div>
 
           {/* Field legend */}
@@ -354,7 +630,7 @@ export function NeoSynth() {
 
         {/* RIGHT COLUMN — Carriers, Envelope, Export */}
         <aside
-          className="flex flex-col gap-4 p-4 overflow-y-auto shrink-0"
+          className="flex flex-col gap-4 p-4 overflow-y-auto shrink-0 neosynth-aside neosynth-aside-right"
           style={{
             width: 240,
             background: "#0e1016",
@@ -363,7 +639,45 @@ export function NeoSynth() {
           data-testid="right-panel"
         >
           {/* Layer A Carrier */}
-          <Section label="LAYER A CARRIER">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <div className="text-xs tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.2)", fontSize: 11, letterSpacing: "0.15em" }}>
+                LAYER A CARRIER
+              </div>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => {
+                    updateParam("layerAMuted", !params.layerAMuted);
+                    if (params.soloLayer === "A") updateParam("soloLayer", null);
+                  }}
+                  className="px-2 py-0.5 rounded text-xs transition-all"
+                  style={{
+                    background: params.layerAMuted ? "rgba(239,68,68,0.15)" : "transparent",
+                    border: `1px solid ${params.layerAMuted ? "rgba(239,68,68,0.5)" : "rgba(255,255,255,0.1)"}`,
+                    color: params.layerAMuted ? "#ef4444" : "rgba(255,255,255,0.4)",
+                    fontSize: 10,
+                    fontWeight: 600,
+                  }}
+                  title="Mute Layer A"
+                >
+                  {params.layerAMuted ? "✕" : "M"}
+                </button>
+                <button
+                  onClick={() => updateParam("soloLayer", params.soloLayer === "A" ? null : "A")}
+                  className="px-2 py-0.5 rounded text-xs transition-all"
+                  style={{
+                    background: params.soloLayer === "A" ? "rgba(34,211,238,0.15)" : "transparent",
+                    border: `1px solid ${params.soloLayer === "A" ? "rgba(34,211,238,0.5)" : "rgba(255,255,255,0.1)"}`,
+                    color: params.soloLayer === "A" ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.4)",
+                    fontSize: 10,
+                    fontWeight: 600,
+                  }}
+                  title="Solo Layer A"
+                >
+                  S
+                </button>
+              </div>
+            </div>
             <div className="flex flex-col gap-2">
               <div className="flex flex-col gap-1">
                 {(Object.keys(CARRIER_INFO) as CarrierType[]).map((c) => (
@@ -413,10 +727,51 @@ export function NeoSynth() {
                 testId="slider-layer-a-gain"
               />
             </div>
-          </Section>
+          </div>
 
           {/* Layer B Toggle */}
-          <Section label="LAYER B">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <div className="text-xs tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.2)", fontSize: 11, letterSpacing: "0.15em" }}>
+                LAYER B
+              </div>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => {
+                    updateParam("layerBMuted", !params.layerBMuted);
+                    if (params.soloLayer === "B") updateParam("soloLayer", null);
+                  }}
+                  className="px-2 py-0.5 rounded text-xs transition-all"
+                  style={{
+                    background: params.layerBMuted ? "rgba(239,68,68,0.15)" : "transparent",
+                    border: `1px solid ${params.layerBMuted ? "rgba(239,68,68,0.5)" : "rgba(255,255,255,0.1)"}`,
+                    color: params.layerBMuted ? "#ef4444" : "rgba(255,255,255,0.4)",
+                    fontSize: 10,
+                    fontWeight: 600,
+                  }}
+                  title="Mute Layer B"
+                  disabled={!params.layerBEnabled}
+                >
+                  {params.layerBMuted ? "✕" : "M"}
+                </button>
+                <button
+                  onClick={() => updateParam("soloLayer", params.soloLayer === "B" ? null : "B")}
+                  className="px-2 py-0.5 rounded text-xs transition-all"
+                  style={{
+                    background: params.soloLayer === "B" ? "rgba(34,211,238,0.15)" : "transparent",
+                    border: `1px solid ${params.soloLayer === "B" ? "rgba(34,211,238,0.5)" : "rgba(255,255,255,0.1)"}`,
+                    color: params.soloLayer === "B" ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.4)",
+                    fontSize: 10,
+                    fontWeight: 600,
+                    opacity: params.layerBEnabled ? 1 : 0.5,
+                  }}
+                  title="Solo Layer B"
+                  disabled={!params.layerBEnabled}
+                >
+                  S
+                </button>
+              </div>
+            </div>
             <button
               onClick={() => updateParam("layerBEnabled", !params.layerBEnabled)}
               className="w-full px-2 py-1.5 rounded text-xs transition-all"
@@ -479,7 +834,7 @@ export function NeoSynth() {
                 />
               </div>
             )}
-          </Section>
+          </div>
 
           {/* Pulse Envelope */}
           <Section label="ENVELOPE">
@@ -576,40 +931,77 @@ export function NeoSynth() {
           {showRandomized && (
             <Section label="RANDOMIZED">
               <SliderRow label="MIN" value={params.randomMinInterval} display={`${params.randomMinInterval.toFixed(1)}s`}
-                min={0.1} max={1} step={0.05} onChange={(v) => updateParam("randomMinInterval", v)} testId="slider-rand-min" />
+                min={0.1} max={1} step={0.05}
+                onChange={(v) => {
+                  const clamped = Math.min(v, params.randomMaxInterval);
+                  updateParam("randomMinInterval", clamped);
+                }}
+                testId="slider-rand-min" />
               <SliderRow label="MAX" value={params.randomMaxInterval} display={`${params.randomMaxInterval.toFixed(1)}s`}
-                min={0.1} max={2} step={0.05} onChange={(v) => updateParam("randomMaxInterval", v)} testId="slider-rand-max" />
+                min={0.1} max={2} step={0.05}
+                onChange={(v) => {
+                  const clamped = Math.max(v, params.randomMinInterval);
+                  updateParam("randomMaxInterval", clamped);
+                }}
+                testId="slider-rand-max" />
             </Section>
           )}
 
           {/* User Audio Upload */}
           <Section label="MIX AUDIO">
-            <button
-              data-testid="button-upload-audio"
-              onClick={() => fileInputRef.current?.click()}
-              className="w-full flex items-center gap-2 px-2 py-2 rounded text-xs transition-all"
+            <div
+              onDrop={handleAudioDrop}
+              onDragOver={(e) => { e.preventDefault(); setIsDragOverAudio(true); }}
+              onDragLeave={() => setIsDragOverAudio(false)}
+              className="flex flex-col gap-2"
               style={{
-                background: "transparent",
-                border: "1px solid rgba(255,255,255,0.1)",
-                color: "rgba(255,255,255,0.45)",
+                padding: "8px",
+                borderRadius: "6px",
+                border: `2px dashed ${isDragOverAudio ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.1)"}`,
+                background: isDragOverAudio ? "rgba(34,211,238,0.05)" : "transparent",
+                transition: "all 150ms",
               }}
             >
-              <Upload size={11} />
-              <span className="truncate">
-                {userFileName ? userFileName : "Upload WAV / MP3"}
-              </span>
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".wav,.mp3,audio/*"
-              onChange={handleFileUpload}
-              className="hidden"
-              data-testid="input-audio-file"
-            />
-            {userFileName && (
-              <div className="text-xs mt-1" style={{ color: "hsl(192,87%,53%)", fontSize: 9, opacity: 0.7 }}>
+              <button
+                data-testid="button-upload-audio"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isLoadingAudio}
+                className="w-full flex items-center gap-2 px-2 py-2 rounded text-xs transition-all"
+                style={{
+                  background: "transparent",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  color: isLoadingAudio ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.45)",
+                  cursor: isLoadingAudio ? "not-allowed" : "pointer",
+                  opacity: isLoadingAudio ? 0.6 : 1,
+                }}
+              >
+                {isLoadingAudio ? (
+                  <span style={{ display: "inline-block", animation: "spin 1s linear infinite" }}>⟳</span>
+                ) : (
+                  <Upload size={11} />
+                )}
+                <span className="truncate">
+                  {isLoadingAudio ? "Loading..." : (userFileName ? userFileName : "Upload WAV / MP3")}
+                </span>
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".wav,.mp3,audio/*"
+                onChange={handleFileUpload}
+                className="hidden"
+                data-testid="input-audio-file"
+                disabled={isLoadingAudio}
+              />
+            </div>
+            {userFileName && !audioError && (
+              <div className="text-xs mt-1" style={{ color: "hsl(192,87%,53%)", fontSize: 11, opacity: 0.7 }}>
                 Loaded · mixed into output
+              </div>
+            )}
+            {audioError && (
+              <div className="text-xs mt-1" style={{ color: "#ef4444", fontSize: 9 }}>
+                ✕ {audioError}
               </div>
             )}
           </Section>
@@ -617,7 +1009,7 @@ export function NeoSynth() {
           {/* Export Settings */}
           <Section label="EXPORT SETTINGS">
             <div className="mb-2">
-              <div className="text-xs mb-1" style={{ color: "rgba(255,255,255,0.3)", fontSize: 9, letterSpacing: "0.1em" }}>BIT DEPTH</div>
+              <div className="text-xs mb-1" style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, letterSpacing: "0.1em" }}>BIT DEPTH</div>
               <div className="flex gap-2">
                 {([16, 24] as const).map((bd) => (
                   <button
@@ -638,7 +1030,7 @@ export function NeoSynth() {
               </div>
             </div>
             <div>
-              <div className="text-xs mb-1" style={{ color: "rgba(255,255,255,0.3)", fontSize: 9, letterSpacing: "0.1em" }}>DURATION</div>
+              <div className="text-xs mb-1" style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, letterSpacing: "0.1em" }}>DURATION</div>
               <div className="flex flex-wrap gap-1">
                 {DURATION_OPTIONS.map((opt) => (
                   <button
@@ -675,13 +1067,36 @@ export function NeoSynth() {
             onToggle={() => setShowSafety(!showSafety)}
             testId="panel-safety"
           >
-            <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.45)" }}>
-              This tool produces bilateral auditory stimulation. Use at comfortable volume levels only.
-              Discontinue use if you experience discomfort, dizziness, or headaches. Not recommended
-              for individuals with epilepsy or seizure disorders. Consult a healthcare professional
-              before use if you have any medical conditions. This tool is for educational and
-              experimental purposes and is not medical equipment.
-            </p>
+            <div className="flex flex-col gap-3">
+              <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.45)" }}>
+                This tool produces bilateral auditory stimulation. Use at comfortable volume levels only.
+                Discontinue use if you experience discomfort, dizziness, or headaches. Not recommended
+                for individuals with epilepsy or seizure disorders. Consult a healthcare professional
+                before use if you have any medical conditions. This tool is for educational and
+                experimental purposes and is not medical equipment.
+              </p>
+              <div
+                className="text-xs leading-relaxed"
+                style={{ color: "rgba(255,255,255,0.35)", fontSize: 10, borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 10 }}
+              >
+                <div style={{ color: "rgba(34,211,238,0.55)", letterSpacing: "0.06em", marginBottom: 4 }}>
+                  SAMPLE ATTRIBUTIONS
+                </div>
+                <p>
+                  Bundled sound samples are sourced from{" "}
+                  <a
+                    href="https://freesound.org"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: "rgba(34,211,238,0.7)", textDecoration: "underline" }}
+                  >
+                    Freesound.org
+                  </a>{" "}
+                  under Creative Commons licenses. Authors: zesoundresearchinc, lezaarth, waveplaysfx,
+                  angelkunev, fmaudio, birdofthenorth, ajanhallinta, redswan_studios, moodyfingers, cvltiv8r.
+                </p>
+              </div>
+            </div>
           </CollapsiblePanel>
 
           <div style={{ width: 1, background: "rgba(255,255,255,0.05)" }} />
@@ -724,7 +1139,7 @@ export function NeoSynth() {
 function Section({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-2">
-      <div className="text-xs tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.2)", fontSize: 9, letterSpacing: "0.15em" }}>
+      <div className="text-xs tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.2)", fontSize: 11, letterSpacing: "0.15em" }}>
         {label}
       </div>
       {children}
@@ -754,7 +1169,7 @@ function SliderRow({
   return (
     <div className="flex flex-col gap-1">
       <div className="flex justify-between items-baseline">
-        <span className="text-xs" style={{ color: "rgba(255,255,255,0.38)", fontSize: 9, letterSpacing: "0.1em" }}>
+        <span className="text-xs" style={{ color: "rgba(255,255,255,0.38)", fontSize: 11, letterSpacing: "0.1em" }}>
           {label}
         </span>
         <span className="text-xs font-semibold" style={{ color: "rgba(34,211,238,0.75)", fontSize: 10 }}>
@@ -782,10 +1197,29 @@ function SamplePicker({
   label: string;
   selectedUrl: string | null;
   onSelect: (path: string) => void;
-  onPreview: (path: string) => void;
+  onPreview: (path: string) => Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [loadingPath, setLoadingPath] = useState<string | null>(null);
+  const [playingPath, setPlayingPath] = useState<string | null>(null);
   const categories = Array.from(new Set(BUNDLED_SAMPLES.map(s => s.category)));
+
+  const handlePreviewClick = async (path: string) => {
+    if (playingPath === path) {
+      audioEngine.stopPreview();
+      setPlayingPath(null);
+      return;
+    }
+    setLoadingPath(path);
+    try {
+      await onPreview(path);
+      setPlayingPath(path);
+    } catch {
+      // ignore preview failures
+    } finally {
+      setLoadingPath(null);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-1">
@@ -796,7 +1230,7 @@ function SamplePicker({
           background: expanded ? "rgba(34,211,238,0.1)" : "transparent",
           border: `1px solid ${expanded ? "rgba(34,211,238,0.4)" : "rgba(255,255,255,0.06)"}`,
           color: expanded ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.65)",
-          fontSize: 9,
+          fontSize: 11,
         }}
       >
         {selectedUrl ? BUNDLED_SAMPLES.find(s => s.path === selectedUrl)?.label || "Selected" : label}
@@ -805,7 +1239,7 @@ function SamplePicker({
         <div className="flex flex-col gap-1 max-h-32 overflow-y-auto">
           {categories.map((cat) => (
             <div key={cat} className="flex flex-col gap-0.5">
-              <div className="text-xs ml-1" style={{ color: "rgba(255,255,255,0.25)", fontSize: 8, textTransform: "uppercase" }}>
+              <div className="text-xs ml-1" style={{ color: "rgba(255,255,255,0.25)", fontSize: 10, textTransform: "uppercase" }}>
                 {cat}
               </div>
               {BUNDLED_SAMPLES.filter(s => s.category === cat).map((sample) => (
@@ -820,22 +1254,28 @@ function SamplePicker({
                       background: selectedUrl === sample.path ? "rgba(34,211,238,0.12)" : "transparent",
                       border: `1px solid ${selectedUrl === sample.path ? "rgba(34,211,238,0.3)" : "rgba(255,255,255,0.05)"}`,
                       color: selectedUrl === sample.path ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.5)",
-                      fontSize: 9,
+                      fontSize: 11,
                     }}
                   >
                     {sample.label}
                   </button>
                   <button
-                    onClick={() => onPreview(sample.path)}
+                    onClick={() => handlePreviewClick(sample.path)}
+                    disabled={loadingPath !== null && loadingPath !== sample.path}
                     className="px-1.5 py-1 rounded text-xs"
                     style={{
-                      background: "rgba(255,255,255,0.05)",
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      color: "rgba(255,255,255,0.4)",
-                      fontSize: 8,
+                      background: playingPath === sample.path ? "rgba(34,211,238,0.15)" : "rgba(255,255,255,0.05)",
+                      border: `1px solid ${playingPath === sample.path ? "rgba(34,211,238,0.4)" : "rgba(255,255,255,0.08)"}`,
+                      color: playingPath === sample.path ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.4)",
+                      fontSize: 10,
+                      minWidth: 22,
+                      cursor: loadingPath !== null && loadingPath !== sample.path ? "not-allowed" : "pointer",
                     }}
+                    title={playingPath === sample.path ? "Stop preview" : "Preview sample"}
                   >
-                    ▶
+                    {loadingPath === sample.path ? (
+                      <span style={{ display: "inline-block", animation: "spin 1s linear infinite" }}>⟳</span>
+                    ) : playingPath === sample.path ? "■" : "▶"}
                   </button>
                 </div>
               ))}

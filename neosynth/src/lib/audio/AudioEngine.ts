@@ -20,11 +20,14 @@ export interface SynthParams {
   carrierFrequency: number;
   sampleUrl: string | null;
   layerAGain: number;
+  layerAMuted: boolean;
   layerBEnabled: boolean;
   layerBCarrierType: CarrierType;
   layerBCarrierFrequency: number;
   layerBGain: number;
+  layerBMuted: boolean;
   layerBSampleUrl: string | null;
+  soloLayer: "A" | "B" | null;
   attack: number;
   decay: number;
   dutyCycle: number;
@@ -47,11 +50,14 @@ export const DEFAULT_PARAMS: SynthParams = {
   carrierFrequency: 200,
   sampleUrl: null,
   layerAGain: 1,
+  layerAMuted: false,
   layerBEnabled: false,
   layerBCarrierType: "pink-noise",
   layerBCarrierFrequency: 200,
   layerBGain: 0.5,
+  layerBMuted: false,
   layerBSampleUrl: null,
+  soloLayer: null,
   attack: 0.05,
   decay: 0.1,
   dutyCycle: 0.5,
@@ -178,7 +184,8 @@ function buildGraph(
   const carrierA = createSynthCarrier(ctx, params.carrierType, params.carrierFrequency, sampleBufferA);
 
   const layerAGain = ctx.createGain();
-  layerAGain.gain.value = params.layerAGain;
+  const layerAEffectiveGain = params.soloLayer === "B" || params.layerAMuted ? 0 : params.layerAGain;
+  layerAGain.gain.value = layerAEffectiveGain;
 
   const envGain = ctx.createGain();
   envGain.gain.value = 0;
@@ -192,7 +199,8 @@ function buildGraph(
   if (params.layerBEnabled) {
     carrierB = createSynthCarrier(ctx, params.layerBCarrierType, params.layerBCarrierFrequency, sampleBufferB);
     layerBGainNode = ctx.createGain();
-    layerBGainNode.gain.value = params.layerBGain;
+    const layerBEffectiveGain = params.soloLayer === "A" || params.layerBMuted ? 0 : params.layerBGain;
+    layerBGainNode.gain.value = layerBEffectiveGain;
     carrierB.output.connect(layerBGainNode);
     layerBGainNode.connect(envGain);
   }
@@ -267,7 +275,7 @@ interface ChunkResult {
 }
 
 function scheduleChunk(
-  ctx: BaseAudioContext,
+  _ctx: BaseAudioContext,
   graph: BilateralGraph,
   params: SynthParams,
   chunkStart: number,
@@ -374,14 +382,11 @@ function scheduleChunk(
     const pulseDur = interval * dutyCycle;
     // Schedule smooth panning as continuous sine wave over the chunk
     const sweepPeriod = 1 / rate;
-    let sweepT = chunkStart;
     const steps = Math.ceil(chunkDuration / 0.02);
     for (let i = 0; i <= steps; i++) {
       const st = chunkStart + (i / steps) * chunkDuration;
-      const elapsed = st - chunkStart + (chunkStart - (ctx?.currentTime ?? chunkStart));
       const phase = (2 * Math.PI * st) / sweepPeriod;
       panner.pan.linearRampToValueAtTime(Math.sin(phase), st);
-      sweepT = st;
     }
     // Still pulse the envelope
     while (t < chunkEnd) {
@@ -393,7 +398,7 @@ function scheduleChunk(
       envGain.gain.linearRampToValueAtTime(0, t + attack + sustain + decay);
       t += interval;
     }
-    return { endTime: t, nextLeftTime: t, nextRightTime: t, nextSide: side, rollPhase: sweepT };
+    return { endTime: t, nextLeftTime: t, nextRightTime: t, nextSide: side, rollPhase: 0 };
   }
 
   // Heartbeat: lub-dub double pulse per cycle, long gap between pairs
@@ -449,6 +454,7 @@ export class AudioEngine {
   private scheduleEnd = 0;
   private scheduleState: ChunkState = { nextLeft: 0, nextRight: 0, side: "left", rollPhase: 0 };
   private isPlaying = false;
+  private playingListeners = new Set<(v: boolean) => void>();
   private params: SynthParams = { ...DEFAULT_PARAMS };
 
   // Live mode extensions
@@ -479,9 +485,13 @@ export class AudioEngine {
 
     this.graph.leftLevel.gain.setTargetAtTime(newParams.leftGain, this.ctx.currentTime, 0.01);
     this.graph.rightLevel.gain.setTargetAtTime(newParams.rightGain, this.ctx.currentTime, 0.01);
-    this.graph.layerAGain.gain.setTargetAtTime(newParams.layerAGain, this.ctx.currentTime, 0.01);
+
+    const layerAEffectiveGain = newParams.soloLayer === "B" || newParams.layerAMuted ? 0 : newParams.layerAGain;
+    this.graph.layerAGain.gain.setTargetAtTime(layerAEffectiveGain, this.ctx.currentTime, 0.01);
+
     if (this.graph.layerBGain) {
-      this.graph.layerBGain.gain.setTargetAtTime(newParams.layerBGain, this.ctx.currentTime, 0.01);
+      const layerBEffectiveGain = newParams.soloLayer === "A" || newParams.layerBMuted ? 0 : newParams.layerBGain;
+      this.graph.layerBGain.gain.setTargetAtTime(layerBEffectiveGain, this.ctx.currentTime, 0.01);
     }
 
     if (newParams.carrierFrequency !== prev.carrierFrequency) {
@@ -523,17 +533,52 @@ export class AudioEngine {
     }
   }
 
+  private previewSource: AudioBufferSourceNode | null = null;
+  private previewUrl: string | null = null;
+
+  /**
+   * Preview a sample. Calling again stops the previous preview first.
+   * Calling with the same URL while it's still playing toggles it off.
+   * Routes through masterGain when live so FX + recorder capture it.
+   */
   async previewSample(url: string): Promise<void> {
     await this.ensureContext();
+
+    // If the same sample is already playing, treat this as a stop.
+    const alreadyPlaying = this.previewSource !== null && this.previewUrl === url;
+    this.stopPreview();
+    if (alreadyPlaying) return;
+
     const resp = await fetch(url);
     const arrayBuffer = await resp.arrayBuffer();
     const decoded = await this.ctx!.decodeAudioData(arrayBuffer);
     const src = this.ctx!.createBufferSource();
     src.buffer = decoded;
-    src.connect(this.ctx!.destination);
+
+    const target: AudioNode = this.graph?.masterGain ?? this.ctx!.destination;
+    src.connect(target);
+    src.onended = () => {
+      if (this.previewSource === src) {
+        this.previewSource = null;
+        this.previewUrl = null;
+      }
+    };
     src.start(0);
-    src.stop(this.ctx!.currentTime + 2);
+    const dur = Math.min(decoded.duration, 2);
+    src.stop(this.ctx!.currentTime + dur);
+    this.previewSource = src;
+    this.previewUrl = url;
   }
+
+  stopPreview() {
+    if (!this.previewSource) return;
+    try { this.previewSource.stop(); } catch {}
+    try { this.previewSource.disconnect(); } catch {}
+    this.previewSource = null;
+    this.previewUrl = null;
+  }
+
+  getPreviewUrl(): string | null { return this.previewUrl; }
 
   private async ensureContext() {
     if (!this.ctx) {
@@ -548,6 +593,7 @@ export class AudioEngine {
     if (this.isPlaying) return;
     await this.ensureContext();
     this.isPlaying = true;
+    this.emitPlaying();
 
     // Load sample buffers from URLs if needed
     if (this.params.carrierType === "sample" && this.params.sampleUrl && !this.sampleBufferA) {
@@ -597,6 +643,7 @@ export class AudioEngine {
   stop() {
     if (!this.isPlaying) return;
     this.isPlaying = false;
+    this.emitPlaying();
     if (this.scheduleInterval) {
       clearInterval(this.scheduleInterval);
       this.scheduleInterval = null;
@@ -675,6 +722,16 @@ export class AudioEngine {
     return this.isPlaying;
   }
 
+  /** Subscribe to isPlaying changes. Returns an unsubscribe fn. */
+  subscribeIsPlaying(listener: (v: boolean) => void): () => void {
+    this.playingListeners.add(listener);
+    return () => { this.playingListeners.delete(listener); };
+  }
+
+  private emitPlaying() {
+    for (const l of this.playingListeners) l(this.isPlaying);
+  }
+
   // ─── Live mode API ──────────────────────────────────────────────────────────
 
   getContext(): AudioContext | null { return this.ctx; }
@@ -744,6 +801,13 @@ export class AudioEngine {
       try { this.streamDest.disconnect(); } catch {}
       this.streamDest = null;
     }
+  }
+
+  /** Scale the master gain (0–1, default 1). */
+  setMasterVolume(volume: number) {
+    if (!this.graph) return;
+    const t = this.ctx?.currentTime ?? 0;
+    this.graph.masterGain.gain.setTargetAtTime(Math.max(0, Math.min(1, volume)), t, 0.01);
   }
 }
 

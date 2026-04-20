@@ -17,6 +17,7 @@ import { liveRecorder } from "../audio/LiveRecorder";
 import { audioEngine } from "../audio/AudioEngine";
 import type { SynthParams } from "../audio/AudioEngine";
 import { downloadBlob } from "../utils/wavExport";
+import { loadPersisted, savePersistedDebounced } from "../utils/persist";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -134,10 +135,15 @@ export interface LiveModeContextValue {
   addRouting: (r: Omit<ModRouting, "id">) => void;
   updateRouting: (id: string, patch: Partial<ModRouting>) => void;
   removeRouting: (id: string) => void;
+  clearAllRoutings: () => void;
 
   macros: [MacroConfig, MacroConfig, MacroConfig, MacroConfig];
   updateMacro: (idx: number, patch: Partial<MacroConfig>) => void;
   setMacroValue: (idx: number, value: number) => void;
+
+  /** Live phase (0–1) of each LFO — read inside RAF, not stored in state. */
+  getLfo1Phase: () => number;
+  getLfo2Phase: () => number;
 
   fx: FXState;
   updateFx: (patch: Partial<FXState>) => void;
@@ -169,20 +175,57 @@ export function LiveModeProvider({
   setSynthParams: (p: SynthParams) => void;
 }) {
   const [isLiveMode, setIsLiveMode] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [isPlaying, setIsPlayingState] = useState(audioEngine.getIsPlaying());
   const [isRecording, setIsRecording] = useState(false);
-  const [bpm, setBpmState] = useState(masterClock.bpm);
-  const [lfo1, setLfo1] = useState<LFOState>(() => defaultLFOState("lfo1"));
-  const [lfo2, setLfo2] = useState<LFOState>(() => defaultLFOState("lfo2"));
-  const [seq, setSeq] = useState<SequencerState>(() => defaultSequencerState());
+
+  // Single source of truth for isPlaying: the AudioEngine. Subscribe so both
+  // surfaces (classic + live) stay in sync when either toggles playback.
+  useEffect(() => audioEngine.subscribeIsPlaying(setIsPlayingState), []);
+
+  const setIsPlaying = useCallback((v: boolean) => {
+    if (v) void audioEngine.start();
+    else audioEngine.stop();
+  }, []);
+  const [bpm, setBpmState] = useState(() => {
+    const stored = loadPersisted<number>("bpm", masterClock.bpm);
+    masterClock.setBpm(stored);
+    return stored;
+  });
+  const [lfo1, setLfo1] = useState<LFOState>(() =>
+    loadPersisted<LFOState>("lfo1", defaultLFOState("lfo1")),
+  );
+  const [lfo2, setLfo2] = useState<LFOState>(() =>
+    loadPersisted<LFOState>("lfo2", defaultLFOState("lfo2")),
+  );
+  const [seq, setSeq] = useState<SequencerState>(() =>
+    loadPersisted<SequencerState>("seq", defaultSequencerState()),
+  );
   const [seqStep, setSeqStep] = useState(0);
-  const [modRoutings, setModRoutings] = useState<ModRouting[]>([]);
-  const [macros, setMacros] = useState(defaultMacros);
-  const [fx, setFx] = useState<FXState>(DEFAULT_FX_STATE);
-  const [snapshots, setSnapshots] = useState<(PatchSnapshot | null)[]>(Array(8).fill(null));
-  const [morphTime, setMorphTime] = useState(2);
+  const [modRoutings, setModRoutings] = useState<ModRouting[]>(() =>
+    loadPersisted<ModRouting[]>("modRoutings", []),
+  );
+  const [macros, setMacros] = useState<[MacroConfig, MacroConfig, MacroConfig, MacroConfig]>(() =>
+    loadPersisted<[MacroConfig, MacroConfig, MacroConfig, MacroConfig]>("macros", defaultMacros()),
+  );
+  const [fx, setFx] = useState<FXState>(() =>
+    loadPersisted<FXState>("fx", DEFAULT_FX_STATE),
+  );
+  const [snapshots, setSnapshots] = useState<(PatchSnapshot | null)[]>(() =>
+    loadPersisted<(PatchSnapshot | null)[]>("snapshots", Array(8).fill(null)),
+  );
+  const [morphTime, setMorphTime] = useState(() => loadPersisted<number>("morphTime", 2));
   const [morphMode, setMorphMode] = useState(false);
   const [activeSnapshot, setActiveSnapshot] = useState<number | null>(null);
+
+  useEffect(() => { savePersistedDebounced("bpm", bpm); }, [bpm]);
+  useEffect(() => { savePersistedDebounced("lfo1", lfo1); }, [lfo1]);
+  useEffect(() => { savePersistedDebounced("lfo2", lfo2); }, [lfo2]);
+  useEffect(() => { savePersistedDebounced("seq", seq); }, [seq]);
+  useEffect(() => { savePersistedDebounced("modRoutings", modRoutings); }, [modRoutings]);
+  useEffect(() => { savePersistedDebounced("macros", macros); }, [macros]);
+  useEffect(() => { savePersistedDebounced("fx", fx); }, [fx]);
+  useEffect(() => { savePersistedDebounced("snapshots", snapshots); }, [snapshots]);
+  useEffect(() => { savePersistedDebounced("morphTime", morphTime); }, [morphTime]);
 
   // Refs for control loop (avoids stale closures)
   const lfo1Ref = useRef(new LFO(lfo1));
@@ -236,10 +279,11 @@ export function LiveModeProvider({
     }
   }, [isLiveMode, isPlaying]);
 
-  // Apply FX state changes to the rack
+  // Apply FX state changes to the rack (also re-applied whenever BPM changes
+  // so clock-synced delay time tracks tempo).
   useEffect(() => {
-    if (fxRackRef.current) fxRackRef.current.applyState(fx);
-  }, [fx]);
+    if (fxRackRef.current) fxRackRef.current.applyState(fx, bpm);
+  }, [fx, bpm]);
 
   // ─── Control loop ──────────────────────────────────────────────────────────
 
@@ -264,10 +308,11 @@ export function LiveModeProvider({
 
     const macroVals = macrosRef.current.map((m) => m.value);
 
+    // Sequencer value is silent (0) when the current step's gate is off.
     const sourceValues: Record<ModSourceId, number> = {
       lfo1: lfo1Val,
       lfo2: lfo2Val,
-      seq: seqResult.value,
+      seq: seqResult.gate ? seqResult.value : 0,
       env: envVal,
       macro1: macroVals[0],
       macro2: macroVals[1],
@@ -352,6 +397,10 @@ export function LiveModeProvider({
 
   const removeRouting = useCallback((id: string) => {
     setModRoutings((prev) => prev.filter((r) => r.id !== id));
+  }, []);
+
+  const clearAllRoutings = useCallback(() => {
+    setModRoutings([]);
   }, []);
 
   const updateMacro = useCallback((idx: number, patch: Partial<MacroConfig>) => {
@@ -478,6 +527,9 @@ export function LiveModeProvider({
     }
   }, []);
 
+  const getLfo1Phase = useCallback(() => lfo1Ref.current.phase, []);
+  const getLfo2Phase = useCallback(() => lfo2Ref.current.phase, []);
+
   const value: LiveModeContextValue = {
     isLiveMode, setIsLiveMode,
     isPlaying, setIsPlaying,
@@ -486,7 +538,7 @@ export function LiveModeProvider({
     lfo1, updateLfo1,
     lfo2, updateLfo2,
     seq, updateSeq, seqStep,
-    modRoutings, addRouting, updateRouting, removeRouting,
+    modRoutings, addRouting, updateRouting, removeRouting, clearAllRoutings,
     macros, updateMacro, setMacroValue,
     fx, updateFx, triggerPad, getMeterAnalyser, getStereoMeter,
     snapshots, saveSnapshot, recallSnapshot,

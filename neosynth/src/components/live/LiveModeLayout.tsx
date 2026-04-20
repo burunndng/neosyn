@@ -14,15 +14,21 @@ import { HelpCircle } from "lucide-react";
 const ACCENT = "hsl(192,87%,53%)";
 
 export function LiveModeLayout() {
-  const { tapTempo, setIsPlaying, isPlaying, snapshots, recallSnapshot, morphTime, morphMode } = useLiveMode();
+  const { tapTempo, setIsPlaying, isPlaying, snapshots, recallSnapshot, morphTime, morphMode, setMorphMode } = useLiveMode();
   const [showHelp, setShowHelp] = useState(false);
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger in text inputs
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        if (e.key !== " ") return;
+      // Don't trigger shortcuts while typing in any editable field.
+      const target = e.target as HTMLElement | null;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target && target.isContentEditable)
+      ) {
+        return;
       }
 
       switch (e.key) {
@@ -37,7 +43,8 @@ export function LiveModeLayout() {
           break;
         case "m":
         case "M":
-          // Morph toggle handled by UI
+          e.preventDefault();
+          setMorphMode(!morphMode);
           break;
         case "?":
           e.preventDefault();
@@ -68,7 +75,7 @@ export function LiveModeLayout() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isPlaying, setIsPlaying, tapTempo, snapshots, recallSnapshot, morphMode, morphTime, showHelp]);
+  }, [isPlaying, setIsPlaying, tapTempo, snapshots, recallSnapshot, morphMode, setMorphMode, morphTime, showHelp]);
 
   return (
     <div
@@ -85,7 +92,7 @@ export function LiveModeLayout() {
       {/* Middle: Mod sources + Mod matrix + Knobs + FX */}
       <div className="flex flex-col gap-4 p-4 flex-1 overflow-y-auto">
         {/* Mod sources */}
-        <div className="flex gap-4">
+        <div className="flex gap-4 live-row-modulation">
           <LFOPanel />
           <SequencerPanel />
         </div>
@@ -155,6 +162,10 @@ export function LiveModeLayout() {
               <div style={{ display: "flex", gap: 16 }}>
                 <div style={{ fontWeight: 600, minWidth: 60 }}>1–8</div>
                 <div>Recall Snapshot 1–8</div>
+              </div>
+              <div style={{ display: "flex", gap: 16 }}>
+                <div style={{ fontWeight: 600, minWidth: 60 }}>M</div>
+                <div>Toggle Morph mode</div>
               </div>
               <div style={{ display: "flex", gap: 16 }}>
                 <div style={{ fontWeight: 600, minWidth: 60 }}>?</div>
