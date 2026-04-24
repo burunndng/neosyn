@@ -1,4 +1,6 @@
 import type { FXRack } from "./FXRack";
+import { masterClock } from "./MasterClock";
+import type { ClockDivision } from "./MasterClock";
 
 export type BilateralPattern =
   | "pure-alternation"
@@ -21,12 +23,19 @@ export interface SynthParams {
   sampleUrl: string | null;
   layerAGain: number;
   layerAMuted: boolean;
+  layerAMode: "loop" | "oneshot";
+  layerARate: number | null;
+  layerADivision: ClockDivision | null;
   layerBEnabled: boolean;
   layerBCarrierType: CarrierType;
   layerBCarrierFrequency: number;
   layerBGain: number;
   layerBMuted: boolean;
   layerBSampleUrl: string | null;
+  layerBMode: "loop" | "oneshot";
+  layerBRate: number | null;
+  layerBDivision: ClockDivision | null;
+  layerBPattern: BilateralPattern | null;
   soloLayer: "A" | "B" | null;
   attack: number;
   decay: number;
@@ -41,6 +50,10 @@ export interface SynthParams {
   clusterPauseDuration: number;
   randomMinInterval: number;
   randomMaxInterval: number;
+  swing: number;
+  sidechainEnabled: boolean;
+  sidechainDepth: number;
+  sidechainDuration: number;
 }
 
 export const DEFAULT_PARAMS: SynthParams = {
@@ -51,12 +64,19 @@ export const DEFAULT_PARAMS: SynthParams = {
   sampleUrl: null,
   layerAGain: 1,
   layerAMuted: false,
+  layerAMode: "loop",
+  layerARate: null,
+  layerADivision: null,
   layerBEnabled: false,
   layerBCarrierType: "pink-noise",
   layerBCarrierFrequency: 200,
   layerBGain: 0.5,
   layerBMuted: false,
   layerBSampleUrl: null,
+  layerBMode: "loop",
+  layerBRate: null,
+  layerBDivision: null,
+  layerBPattern: null,
   soloLayer: null,
   attack: 0.05,
   decay: 0.1,
@@ -71,6 +91,10 @@ export const DEFAULT_PARAMS: SynthParams = {
   clusterPauseDuration: 0.5,
   randomMinInterval: 0.2,
   randomMaxInterval: 0.6,
+  swing: 0,
+  sidechainEnabled: false,
+  sidechainDepth: 0.7,
+  sidechainDuration: 0.12,
 };
 
 function createNoiseBuffer(
@@ -166,9 +190,19 @@ interface BilateralGraph {
   carrierB: CarrierPair | null;
   layerAGain: GainNode;
   layerBGain: GainNode | null;
-  envGain: GainNode;
-  panner: StereoPannerNode;
-  splitter: ChannelSplitterNode;
+  // Per-layer independent envelope + panner + splitter
+  envGainA: GainNode;
+  envGainB: GainNode;
+  pannerA: StereoPannerNode;
+  pannerB: StereoPannerNode;
+  splitterA: ChannelSplitterNode;
+  splitterB: ChannelSplitterNode;
+  // Sidechain: sits between layerBGain and envGainB — mod-matrix never writes here
+  sidechainGain: GainNode;
+  // Aliases kept for mod-matrix / legacy callers
+  envGain: GainNode;    // = envGainA
+  panner: StereoPannerNode;  // = pannerA
+  splitter: ChannelSplitterNode;  // = splitterA
   leftLevel: GainNode;
   rightLevel: GainNode;
   merger: ChannelMergerNode;
@@ -181,47 +215,89 @@ function buildGraph(
   sampleBufferA: AudioBuffer | null,
   sampleBufferB: AudioBuffer | null
 ): BilateralGraph {
-  const carrierA = createSynthCarrier(ctx, params.carrierType, params.carrierFrequency, sampleBufferA);
+  // ── Layer A ──────────────────────────────────────────────────────────────
+  // In oneshot mode we don't build a looping carrier — pulses are triggered
+  // individually. The looping carrier is only built in "loop" mode.
+  const carrierA = params.layerAMode === "oneshot"
+    ? createSynthCarrier(ctx, "sine", 1, null)  // dummy silent carrier
+    : createSynthCarrier(ctx, params.carrierType, params.carrierFrequency, sampleBufferA);
 
   const layerAGain = ctx.createGain();
   const layerAEffectiveGain = params.soloLayer === "B" || params.layerAMuted ? 0 : params.layerAGain;
   layerAGain.gain.value = layerAEffectiveGain;
 
-  const envGain = ctx.createGain();
-  envGain.gain.value = 0;
+  // In oneshot mode envGainA stays at 1; individual shots have their own envelope
+  const envGainA = ctx.createGain();
+  envGainA.gain.value = params.layerAMode === "loop" ? 0 : 1;
 
-  carrierA.output.connect(layerAGain);
-  layerAGain.connect(envGain);
+  if (params.layerAMode === "loop") {
+    carrierA.output.connect(layerAGain);
+    layerAGain.connect(envGainA);
+  }
+  // (In oneshot mode, shots connect directly into layerAGain → envGainA at schedule time)
 
+  // ── Layer B ──────────────────────────────────────────────────────────────
   let carrierB: CarrierPair | null = null;
   let layerBGainNode: GainNode | null = null;
+  const envGainB = ctx.createGain();
+  envGainB.gain.value = 0;
+
+  // Sidechain node — always created; insertion between layerBGain and envGainB.
+  // Mod-matrix never writes here, so sidechain dips are safe from automation conflicts.
+  const sidechainGain = ctx.createGain();
+  sidechainGain.gain.value = 1;
 
   if (params.layerBEnabled) {
-    carrierB = createSynthCarrier(ctx, params.layerBCarrierType, params.layerBCarrierFrequency, sampleBufferB);
+    carrierB = params.layerBMode === "oneshot"
+      ? createSynthCarrier(ctx, "sine", 1, null)  // dummy silent carrier
+      : createSynthCarrier(ctx, params.layerBCarrierType, params.layerBCarrierFrequency, sampleBufferB);
+
     layerBGainNode = ctx.createGain();
     const layerBEffectiveGain = params.soloLayer === "A" || params.layerBMuted ? 0 : params.layerBGain;
     layerBGainNode.gain.value = layerBEffectiveGain;
-    carrierB.output.connect(layerBGainNode);
-    layerBGainNode.connect(envGain);
+
+    if (params.layerBMode === "loop") {
+      carrierB.output.connect(layerBGainNode);
+      layerBGainNode.connect(sidechainGain);
+      sidechainGain.connect(envGainB);
+      envGainB.gain.value = 0;
+    } else {
+      // Oneshot sources connect directly into layerBGain at schedule time,
+      // and layerBGain still feeds sidechain → envGainB so shots are ducked too.
+      layerBGainNode.connect(sidechainGain);
+      sidechainGain.connect(envGainB);
+      envGainB.gain.value = 1;
+    }
   }
 
-  const panner = ctx.createStereoPanner();
-  panner.pan.value = -1;
-
-  const splitter = ctx.createChannelSplitter(2);
+  // ── Per-layer panner + splitter ───────────────────────────────────────────
+  // Both panners' output channels are summed into shared leftLevel / rightLevel.
   const leftLevel = ctx.createGain();
   leftLevel.gain.value = params.leftGain;
   const rightLevel = ctx.createGain();
   rightLevel.gain.value = params.rightGain;
-
   const merger = ctx.createChannelMerger(2);
   const masterGain = ctx.createGain();
   masterGain.gain.value = 1;
 
-  envGain.connect(panner);
-  panner.connect(splitter);
-  splitter.connect(leftLevel, 0);
-  splitter.connect(rightLevel, 1);
+  const pannerA = ctx.createStereoPanner();
+  pannerA.pan.value = -1;
+  const splitterA = ctx.createChannelSplitter(2);
+  envGainA.connect(pannerA);
+  pannerA.connect(splitterA);
+  splitterA.connect(leftLevel, 0);
+  splitterA.connect(rightLevel, 1);
+
+  const pannerB = ctx.createStereoPanner();
+  pannerB.pan.value = -1;
+  const splitterB = ctx.createChannelSplitter(2);
+  if (params.layerBEnabled) {
+    envGainB.connect(pannerB);
+    pannerB.connect(splitterB);
+    splitterB.connect(leftLevel, 0);
+    splitterB.connect(rightLevel, 1);
+  }
+
   leftLevel.connect(merger, 0, 0);
   rightLevel.connect(merger, 0, 1);
   merger.connect(masterGain);
@@ -231,9 +307,17 @@ function buildGraph(
     carrierB,
     layerAGain,
     layerBGain: layerBGainNode,
-    envGain,
-    panner,
-    splitter,
+    envGainA,
+    envGainB,
+    pannerA,
+    pannerB,
+    splitterA,
+    splitterB,
+    sidechainGain,
+    // backward-compat aliases
+    envGain: envGainA,
+    panner: pannerA,
+    splitter: splitterA,
     leftLevel,
     rightLevel,
     merger,
@@ -250,9 +334,13 @@ function teardownGraph(graph: BilateralGraph) {
   }
   graph.layerAGain.disconnect();
   graph.layerBGain?.disconnect();
-  graph.envGain.disconnect();
-  graph.panner.disconnect();
-  graph.splitter.disconnect();
+  graph.envGainA.disconnect();
+  graph.envGainB.disconnect();
+  graph.pannerA.disconnect();
+  graph.pannerB.disconnect();
+  graph.splitterA.disconnect();
+  graph.splitterB.disconnect();
+  graph.sidechainGain.disconnect();
   graph.leftLevel.disconnect();
   graph.rightLevel.disconnect();
   graph.merger.disconnect();
@@ -264,6 +352,7 @@ interface ChunkState {
   nextRight: number;
   side: "left" | "right";
   rollPhase: number;
+  pulseIdx: number;
 }
 
 interface ChunkResult {
@@ -272,35 +361,114 @@ interface ChunkResult {
   nextRightTime: number;
   nextSide: "left" | "right";
   rollPhase: number;
+  pulseIdx: number;
+}
+
+/** Compute effective Hz for a layer, respecting its rate/division overrides. */
+function effectiveLayerRate(
+  layerRate: number | null,
+  layerDivision: ClockDivision | null,
+  fallbackRate: number
+): number {
+  if (layerDivision !== null) return masterClock.divisionHz(layerDivision);
+  if (layerRate !== null) return layerRate;
+  return fallbackRate;
+}
+
+/** Schedule a one-shot sample pulse. Creates a new BufferSourceNode per pulse. */
+function scheduleOneShot(
+  ctx: BaseAudioContext,
+  buffer: AudioBuffer,
+  channel: "left" | "right" | "both",
+  panner: StereoPannerNode,
+  layerGain: GainNode,
+  panMode: PanMode,
+  attack: number,
+  decay: number,
+  pulseDur: number,
+  t: number
+): void {
+  if (pulseDur < 0.002) return;
+  const src = ctx.createBufferSource();
+  src.buffer = buffer;
+  const oneShotEnv = ctx.createGain();
+  oneShotEnv.gain.setValueAtTime(0, t);
+  oneShotEnv.gain.linearRampToValueAtTime(1, t + attack);
+  const sustain = Math.max(0, pulseDur - attack - decay);
+  oneShotEnv.gain.setValueAtTime(1, t + attack + sustain);
+  oneShotEnv.gain.linearRampToValueAtTime(0, t + attack + sustain + decay);
+  src.connect(oneShotEnv);
+  oneShotEnv.connect(layerGain);
+  const targetPan = channel === "both" ? 0 : channel === "left" ? -1 : 1;
+  if (panMode === "hard") {
+    panner.pan.setValueAtTime(targetPan, t);
+  } else {
+    panner.pan.linearRampToValueAtTime(targetPan, t + Math.min(pulseDur * 0.5, 0.05));
+  }
+  src.start(t);
+  src.stop(t + pulseDur + decay + 0.05);
+  src.onended = () => { try { oneShotEnv.disconnect(); src.disconnect(); } catch {} };
 }
 
 function scheduleChunk(
-  _ctx: BaseAudioContext,
-  graph: BilateralGraph,
+  ctx: BaseAudioContext,
+  envGain: GainNode,
+  panner: StereoPannerNode,
   params: SynthParams,
   chunkStart: number,
   chunkDuration: number,
-  state: ChunkState
+  state: ChunkState,
+  layerMode: "loop" | "oneshot",
+  sampleBuffer: AudioBuffer | null,
+  layerGain: GainNode,
+  rate: number,
+  pattern: BilateralPattern,
+  sidechainGain: GainNode | null = null
 ): ChunkResult {
-  const { attack, decay, dutyCycle, pattern, rate, panMode } = params;
+  const { attack, decay, dutyCycle, panMode } = params;
   const chunkEnd = chunkStart + chunkDuration;
   let { side } = state;
   const interval = 1 / rate;
-  const { envGain, panner } = graph;
+  const swing = Math.max(0, Math.min(0.5, params.swing ?? 0));
+  // Pulse counter continues across chunks so swing is consistent.
+  let pulseIdx = state.pulseIdx ?? 0;
+  function applySwing(t: number): number {
+    if (swing <= 0) return t;
+    return pulseIdx % 2 === 1 ? t + interval * swing * 0.5 : t;
+  }
+
+  function scheduleSidechain(t: number) {
+    if (!sidechainGain || !params.sidechainEnabled) return;
+    const depth = Math.max(0, Math.min(1, params.sidechainDepth));
+    const dur = Math.max(0.02, Math.min(0.5, params.sidechainDuration));
+    const floor = 1 - depth;
+    // Abrupt dip at t (fast attack), linear recover over dur.
+    sidechainGain.gain.cancelScheduledValues(t);
+    sidechainGain.gain.setValueAtTime(1, t);
+    sidechainGain.gain.linearRampToValueAtTime(floor, t + 0.005);
+    sidechainGain.gain.linearRampToValueAtTime(1, t + dur);
+  }
 
   function schedulePulseAt(t: number, channel: "left" | "right" | "both", pulseDur: number) {
-    envGain.gain.cancelScheduledValues(t);
-    envGain.gain.setValueAtTime(0, t);
-    envGain.gain.linearRampToValueAtTime(1, t + attack);
+    const tt = applySwing(t);
+    pulseIdx++;
+    scheduleSidechain(tt);
+    if (layerMode === "oneshot" && sampleBuffer) {
+      scheduleOneShot(ctx, sampleBuffer, channel, panner, layerGain, panMode, attack, decay, pulseDur, tt);
+      return;
+    }
+    envGain.gain.cancelScheduledValues(tt);
+    envGain.gain.setValueAtTime(0, tt);
+    envGain.gain.linearRampToValueAtTime(1, tt + attack);
     const sustain = Math.max(0, pulseDur - attack - decay);
-    envGain.gain.setValueAtTime(1, t + attack + sustain);
-    envGain.gain.linearRampToValueAtTime(0, t + attack + sustain + decay);
+    envGain.gain.setValueAtTime(1, tt + attack + sustain);
+    envGain.gain.linearRampToValueAtTime(0, tt + attack + sustain + decay);
 
     const targetPan = channel === "both" ? 0 : channel === "left" ? -1 : 1;
     if (panMode === "hard") {
-      panner.pan.setValueAtTime(targetPan, t);
+      panner.pan.setValueAtTime(targetPan, tt);
     } else {
-      panner.pan.linearRampToValueAtTime(targetPan, t + Math.min(pulseDur * 0.5, interval * 0.4));
+      panner.pan.linearRampToValueAtTime(targetPan, tt + Math.min(pulseDur * 0.5, interval * 0.4));
     }
   }
 
@@ -312,7 +480,7 @@ function scheduleChunk(
       side = side === "left" ? "right" : "left";
       t += interval;
     }
-    return { endTime: t, nextLeftTime: t, nextRightTime: t, nextSide: side, rollPhase: 0 };
+    return { endTime: t, nextLeftTime: t, nextRightTime: t, nextSide: side, rollPhase: 0, pulseIdx };
   }
 
   if (pattern === "mirrored-overlap") {
@@ -327,7 +495,7 @@ function scheduleChunk(
         t += interval;
       }
     }
-    return { endTime: t, nextLeftTime: t, nextRightTime: t, nextSide: side, rollPhase: 0 };
+    return { endTime: t, nextLeftTime: t, nextRightTime: t, nextSide: side, rollPhase: 0, pulseIdx };
   }
 
   if (pattern === "asymmetric") {
@@ -347,7 +515,7 @@ function scheduleChunk(
         break;
       }
     }
-    return { endTime: Math.max(nextLeft, nextRight), nextLeftTime: nextLeft, nextRightTime: nextRight, nextSide: side, rollPhase: 0 };
+    return { endTime: Math.max(nextLeft, nextRight), nextLeftTime: nextLeft, nextRightTime: nextRight, nextSide: side, rollPhase: 0, pulseIdx };
   }
 
   if (pattern === "clustered") {
@@ -362,7 +530,7 @@ function scheduleChunk(
       }
       t += params.clusterBurstCount * burstInterval + params.clusterPauseDuration;
     }
-    return { endTime: t, nextLeftTime: t, nextRightTime: t, nextSide: side, rollPhase: 0 };
+    return { endTime: t, nextLeftTime: t, nextRightTime: t, nextSide: side, rollPhase: 0, pulseIdx };
   }
 
   if (pattern === "randomized") {
@@ -373,14 +541,13 @@ function scheduleChunk(
       side = side === "left" ? "right" : "left";
       t += ri;
     }
-    return { endTime: t, nextLeftTime: t, nextRightTime: t, nextSide: side, rollPhase: 0 };
+    return { endTime: t, nextLeftTime: t, nextRightTime: t, nextSide: side, rollPhase: 0, pulseIdx };
   }
 
   // Ping-Pong Sweep: continuous sine-wave panning, discrete envelope pulses
   if (pattern === "ping-pong-sweep") {
     let t = Math.min(state.nextLeft, state.nextRight);
     const pulseDur = interval * dutyCycle;
-    // Schedule smooth panning as continuous sine wave over the chunk
     const sweepPeriod = 1 / rate;
     const steps = Math.ceil(chunkDuration / 0.02);
     for (let i = 0; i <= steps; i++) {
@@ -388,17 +555,23 @@ function scheduleChunk(
       const phase = (2 * Math.PI * st) / sweepPeriod;
       panner.pan.linearRampToValueAtTime(Math.sin(phase), st);
     }
-    // Still pulse the envelope
     while (t < chunkEnd) {
-      envGain.gain.cancelScheduledValues(t);
-      envGain.gain.setValueAtTime(0, t);
-      envGain.gain.linearRampToValueAtTime(1, t + attack);
-      const sustain = Math.max(0, pulseDur - attack - decay);
-      envGain.gain.setValueAtTime(1, t + attack + sustain);
-      envGain.gain.linearRampToValueAtTime(0, t + attack + sustain + decay);
+      const tt = applySwing(t);
+      pulseIdx++;
+      scheduleSidechain(tt);
+      if (layerMode === "oneshot" && sampleBuffer) {
+        scheduleOneShot(ctx, sampleBuffer, "both", panner, layerGain, panMode, attack, decay, pulseDur, tt);
+      } else {
+        envGain.gain.cancelScheduledValues(tt);
+        envGain.gain.setValueAtTime(0, tt);
+        envGain.gain.linearRampToValueAtTime(1, tt + attack);
+        const sustain = Math.max(0, pulseDur - attack - decay);
+        envGain.gain.setValueAtTime(1, tt + attack + sustain);
+        envGain.gain.linearRampToValueAtTime(0, tt + attack + sustain + decay);
+      }
       t += interval;
     }
-    return { endTime: t, nextLeftTime: t, nextRightTime: t, nextSide: side, rollPhase: 0 };
+    return { endTime: t, nextLeftTime: t, nextRightTime: t, nextSide: side, rollPhase: 0, pulseIdx };
   }
 
   // Heartbeat: lub-dub double pulse per cycle, long gap between pairs
@@ -420,7 +593,7 @@ function scheduleChunk(
       side = side === "left" ? "right" : "left";
       t += interval;
     }
-    return { endTime: t, nextLeftTime: t, nextRightTime: t, nextSide: side, rollPhase: 0 };
+    return { endTime: t, nextLeftTime: t, nextRightTime: t, nextSide: side, rollPhase: 0, pulseIdx };
   }
 
   // Bilateral Roll: accelerating burst that speeds up through the cycle then resets
@@ -437,10 +610,10 @@ function scheduleChunk(
       t += interval / speedFactor;
       rollPhase++;
     }
-    return { endTime: t, nextLeftTime: t, nextRightTime: t, nextSide: side, rollPhase };
+    return { endTime: t, nextLeftTime: t, nextRightTime: t, nextSide: side, rollPhase, pulseIdx };
   }
 
-  return { endTime: chunkEnd, nextLeftTime: chunkEnd, nextRightTime: chunkEnd, nextSide: side, rollPhase: 0 };
+  return { endTime: chunkEnd, nextLeftTime: chunkEnd, nextRightTime: chunkEnd, nextSide: side, rollPhase: 0, pulseIdx };
 }
 
 export class AudioEngine {
@@ -452,7 +625,8 @@ export class AudioEngine {
   private sampleBufferB: AudioBuffer | null = null;
   private scheduleInterval: ReturnType<typeof setInterval> | null = null;
   private scheduleEnd = 0;
-  private scheduleState: ChunkState = { nextLeft: 0, nextRight: 0, side: "left", rollPhase: 0 };
+  private scheduleStateA: ChunkState = { nextLeft: 0, nextRight: 0, side: "left", rollPhase: 0, pulseIdx: 0 };
+  private scheduleStateB: ChunkState = { nextLeft: 0, nextRight: 0, side: "left", rollPhase: 0, pulseIdx: 0 };
   private isPlaying = false;
   private playingListeners = new Set<(v: boolean) => void>();
   private params: SynthParams = { ...DEFAULT_PARAMS };
@@ -475,7 +649,9 @@ export class AudioEngine {
       newParams.layerBCarrierType !== prev.layerBCarrierType ||
       newParams.panMode !== prev.panMode ||
       newParams.sampleUrl !== prev.sampleUrl ||
-      newParams.layerBSampleUrl !== prev.layerBSampleUrl;
+      newParams.layerBSampleUrl !== prev.layerBSampleUrl ||
+      newParams.layerAMode !== prev.layerAMode ||
+      newParams.layerBMode !== prev.layerBMode;
 
     if (needsRebuild) {
       this.stop();
@@ -636,7 +812,8 @@ export class AudioEngine {
 
     const startOffset = this.ctx!.currentTime + 0.05;
     this.scheduleEnd = startOffset;
-    this.scheduleState = { nextLeft: startOffset, nextRight: startOffset, side: "left", rollPhase: 0 };
+    this.scheduleStateA = { nextLeft: startOffset, nextRight: startOffset, side: "left", rollPhase: 0, pulseIdx: 0 };
+    this.scheduleStateB = { nextLeft: startOffset, nextRight: startOffset, side: "left", rollPhase: 0, pulseIdx: 0 };
     this.runScheduler();
   }
 
@@ -668,21 +845,61 @@ export class AudioEngine {
       if (!this.isPlaying || !this.ctx || !this.graph) return;
       const now = this.ctx.currentTime;
       while (this.scheduleEnd < now + LOOK_AHEAD) {
-        const result = scheduleChunk(
+        const ep = this.effectiveParams();
+        const rateA = effectiveLayerRate(ep.layerARate, ep.layerADivision, ep.rate);
+        const patternA = ep.pattern;
+
+        const resultA = scheduleChunk(
           this.ctx,
-          this.graph,
-          this.effectiveParams(),
+          this.graph.envGainA,
+          this.graph.pannerA,
+          ep,
           this.scheduleEnd,
           CHUNK_DURATION,
-          this.scheduleState
+          this.scheduleStateA,
+          ep.layerAMode,
+          ep.layerAMode === "oneshot" ? this.sampleBufferA : null,
+          this.graph.layerAGain,
+          rateA,
+          patternA,
+          this.graph.sidechainGain  // Layer A drives the duck
         );
-        this.scheduleState = {
-          nextLeft: result.nextLeftTime,
-          nextRight: result.nextRightTime,
-          side: result.nextSide,
-          rollPhase: result.rollPhase,
+        this.scheduleStateA = {
+          nextLeft: resultA.nextLeftTime,
+          nextRight: resultA.nextRightTime,
+          side: resultA.nextSide,
+          rollPhase: resultA.rollPhase,
+          pulseIdx: resultA.pulseIdx,
         };
-        this.scheduleEnd = result.endTime;
+
+        if (ep.layerBEnabled) {
+          const rateB = effectiveLayerRate(ep.layerBRate, ep.layerBDivision, ep.rate);
+          const patternB = ep.layerBPattern ?? ep.pattern;
+          const resultB = scheduleChunk(
+            this.ctx,
+            this.graph.envGainB,
+            this.graph.pannerB,
+            ep,
+            this.scheduleEnd,
+            CHUNK_DURATION,
+            this.scheduleStateB,
+            ep.layerBMode,
+            ep.layerBMode === "oneshot" ? this.sampleBufferB : null,
+            this.graph.layerBGain ?? this.graph.layerAGain,
+            rateB,
+            patternB,
+            null  // Layer B is the receiver, not driver
+          );
+          this.scheduleStateB = {
+            nextLeft: resultB.nextLeftTime,
+            nextRight: resultB.nextRightTime,
+            side: resultB.nextSide,
+            rollPhase: resultB.rollPhase,
+            pulseIdx: resultB.pulseIdx,
+          };
+        }
+
+        this.scheduleEnd = resultA.endTime;
       }
     };
 
@@ -712,8 +929,20 @@ export class AudioEngine {
       src.start(0);
     }
 
-    const initState: ChunkState = { nextLeft: 0, nextRight: 0, side: "left", rollPhase: 0 };
-    scheduleChunk(offlineCtx, graph, params, 0, durationSeconds, initState);
+    const initStateA: ChunkState = { nextLeft: 0, nextRight: 0, side: "left", rollPhase: 0, pulseIdx: 0 };
+    const rateA = effectiveLayerRate(params.layerARate, params.layerADivision, params.rate);
+    scheduleChunk(offlineCtx, graph.envGainA, graph.pannerA, params, 0, durationSeconds, initStateA,
+      params.layerAMode, params.layerAMode === "oneshot" ? bufA : null, graph.layerAGain,
+      rateA, params.pattern, graph.sidechainGain);
+
+    if (params.layerBEnabled) {
+      const initStateB: ChunkState = { nextLeft: 0, nextRight: 0, side: "left", rollPhase: 0, pulseIdx: 0 };
+      const rateB = effectiveLayerRate(params.layerBRate, params.layerBDivision, params.rate);
+      const patternB = params.layerBPattern ?? params.pattern;
+      scheduleChunk(offlineCtx, graph.envGainB, graph.pannerB, params, 0, durationSeconds, initStateB,
+        params.layerBMode, params.layerBMode === "oneshot" ? bufB : null,
+        graph.layerBGain ?? graph.layerAGain, rateB, patternB, null);
+    }
 
     return offlineCtx.startRendering();
   }

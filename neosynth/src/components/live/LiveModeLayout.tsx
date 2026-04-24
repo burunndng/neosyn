@@ -7,6 +7,7 @@ import { ModMatrixPanel } from "./ModMatrixPanel";
 import { MacroKnobs } from "./MacroKnobs";
 import { FXRackPanel } from "./FXRackPanel";
 import { SnapshotBank } from "./SnapshotBank";
+import { SceneStrip } from "./SceneStrip";
 import { PerformancePads } from "./PerformancePads";
 import { OutputMeter } from "./OutputMeter";
 import { HelpCircle } from "lucide-react";
@@ -121,6 +122,9 @@ export function LiveModeLayout() {
 
         {/* Snapshots */}
         <SnapshotBank />
+
+        {/* Scene auto-arrange */}
+        <SceneStrip />
       </div>
 
       {/* Help overlay */}
@@ -174,8 +178,10 @@ export function LiveModeLayout() {
               <hr style={{ opacity: 0.2, margin: "12px 0" }} />
               <div style={{ fontSize: 10, color: "rgba(255,255,255,0.5)" }}>
                 <p>Right-click snapshot slots to save.</p>
+                <p>Right-click a sequencer step to edit its probability.</p>
                 <p>Drag knobs up/down to adjust values.</p>
                 <p>Modulation matrix runs at 50 Hz control rate.</p>
+                <p>Arm SCENE to auto-cycle through 4 snapshot slots on a bar counter.</p>
               </div>
             </div>
             <button

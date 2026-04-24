@@ -11,6 +11,7 @@ export function ClockPanel() {
     bpm, setBpm, tapTempo,
     isPlaying, setIsPlaying,
     isRecording, startRecording, stopRecording,
+    sceneArmed, setSceneArmed,
   } = useLiveMode();
   const { masterVolume, setMasterVolume } = useSynthParams();
 
@@ -60,6 +61,24 @@ export function ClockPanel() {
           title="Record session"
         >
           {isRecording ? <StopCircle size={16} /> : <Circle size={16} />}
+        </button>
+
+        <button
+          onClick={() => setSceneArmed(!sceneArmed)}
+          className="flex items-center justify-center rounded px-2"
+          style={{
+            height: 40,
+            background: sceneArmed ? "rgba(34,211,238,0.15)" : "rgba(255,255,255,0.06)",
+            border: `1px solid ${sceneArmed ? ACCENT : "rgba(255,255,255,0.1)"}`,
+            color: sceneArmed ? ACCENT : DIM,
+            fontSize: 10,
+            fontFamily: "'JetBrains Mono', monospace",
+            letterSpacing: "0.12em",
+            fontWeight: 600,
+          }}
+          title="Arm auto-arrange scene (cycles through scene slots on bar counts)"
+        >
+          SCENE
         </button>
       </div>
 

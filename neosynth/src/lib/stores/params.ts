@@ -3,9 +3,11 @@ import type { ReactNode } from "react";
 import type { SynthParams, BilateralPattern, CarrierType, PanMode } from "../audio/AudioEngine";
 import { DEFAULT_PARAMS } from "../audio/AudioEngine";
 import { loadPersisted, savePersistedDebounced } from "../utils/persist";
+import type { ClockDivision } from "../audio/MasterClock";
+import { CLOCK_DIVISIONS } from "../audio/MasterClock";
 
-export type { BilateralPattern, CarrierType, PanMode, SynthParams };
-export { DEFAULT_PARAMS };
+export type { BilateralPattern, CarrierType, PanMode, SynthParams, ClockDivision };
+export { DEFAULT_PARAMS, CLOCK_DIVISIONS };
 
 export interface RatePreset {
   name: string;
@@ -120,22 +122,33 @@ export const CARRIER_INFO: Record<CarrierType, { label: string; description: str
 export interface BundledSample {
   slug: string;
   label: string;
-  category: "percussion" | "bass" | "sfx" | "ambient";
+  category: "drum" | "percussion" | "bass" | "sfx" | "ambient";
   path: string;
 }
 
 export const BUNDLED_SAMPLES: BundledSample[] = [
-  { slug: "sub-kick",     label: "Sub Kick",     category: "percussion", path: "/sounds/117493__zesoundresearchinc__kick-28-subwoofer-test.wav" },
-  { slug: "laser",        label: "Laser",         category: "sfx",        path: "/sounds/232817__lezaarth__lasergun.wav" },
-  { slug: "house-kick",   label: "House Kick",    category: "percussion", path: "/sounds/385874__waveplaysfx__kick-prog-house-kick.wav" },
-  { slug: "kick",         label: "Kick",          category: "percussion", path: "/sounds/536545__angelkunev__hard-drum-kick-destroyer.wav" },
-  { slug: "intercom",     label: "Intercom",      category: "sfx",        path: "/sounds/555140__fmaudio__lifting-up-intercom-phone.wav" },
-  { slug: "paper-reload", label: "Paper Reload",  category: "sfx",        path: "/sounds/613291__birdofthenorth__paper-reload.wav" },
-  { slug: "ouch",         label: "Ouch",          category: "sfx",        path: "/sounds/649543__ajanhallinta__ouch.wav" },
-  { slug: "player-hurt",  label: "Player Hurt",   category: "sfx",        path: "/sounds/678594__redswan_studios__player-hurt-3.wav" },
-  { slug: "music-box",    label: "Music Box",     category: "ambient",    path: "/sounds/731365__moodyfingers__hand-crank-music-box-cranking.wav" },
-  { slug: "bass-loop",    label: "Bass Loop",     category: "bass",       path: "/sounds/798639__cvltiv8r__cvlt-bass-98.wav" },
+  // ── Kicks ──────────────────────────────────────────────────────────────
+  { slug: "psy-kick",    label: "Psy Kick",     category: "drum",      path: "/sounds/psy-kick-01.wav" },
+  { slug: "techno-kick", label: "Techno Kick",  category: "drum",      path: "/sounds/techno-kick-01.wav" },
+  { slug: "sub-kick",    label: "Sub Kick",     category: "drum",      path: "/sounds/117493__zesoundresearchinc__kick-28-subwoofer-test.wav" },
+  { slug: "house-kick",  label: "House Kick",   category: "drum",      path: "/sounds/385874__waveplaysfx__kick-prog-house-kick.wav" },
+  { slug: "kick",        label: "Hard Kick",    category: "drum",      path: "/sounds/536545__angelkunev__hard-drum-kick-destroyer.wav" },
+  // ── Percussion ─────────────────────────────────────────────────────────
+  { slug: "closed-hat",  label: "Closed Hat",   category: "percussion", path: "/sounds/closed-hat-01.wav" },
+  { slug: "open-hat",    label: "Open Hat",     category: "percussion", path: "/sounds/open-hat-01.wav" },
+  { slug: "shaker",      label: "Shaker",       category: "percussion", path: "/sounds/shaker-01.wav" },
+  { slug: "clap",        label: "808 Clap",     category: "percussion", path: "/sounds/clap-808.wav" },
+  // ── Bass ───────────────────────────────────────────────────────────────
+  { slug: "acid-loop",   label: "Acid 303",     category: "bass",      path: "/sounds/acid-loop-303.wav" },
+  { slug: "rumble-sub",  label: "Rumble Sub",   category: "bass",      path: "/sounds/rumble-sub-01.wav" },
+  { slug: "bass-loop",   label: "Bass Loop",    category: "bass",      path: "/sounds/798639__cvltiv8r__cvlt-bass-98.wav" },
+  // ── SFX / Ambient ──────────────────────────────────────────────────────
+  { slug: "noise-riser", label: "Noise Riser",  category: "sfx",       path: "/sounds/noise-riser-01.wav" },
 ];
+
+export function samplePathBySlug(slug: string): string | undefined {
+  return BUNDLED_SAMPLES.find(s => s.slug === slug)?.path;
+}
 
 export interface SessionPreset {
   name: string;
@@ -305,6 +318,191 @@ export const SESSION_PRESETS: SessionPreset[] = [
       leftGain: 0.8,
       rightGain: 0.8,
       panMode: "smooth",
+    },
+  },
+
+  // ── Psytrance / Techno genre presets (125–150 BPM region) ──────────────
+  // Hz values are BPM-equivalent: 4 Hz ≈ 1/4 @ 128 BPM, 8 Hz ≈ 1/4 @ 128 BPM / 1/8 @ 256
+  {
+    name: "psy-pulse-alpha",
+    label: "Psy Pulse Alpha",
+    description: "8 Hz psy kick + pink-noise sub layer for alpha-range bilateral groove",
+    params: {
+      pattern: "pure-alternation",
+      rate: 8,
+      carrierType: "sample",
+      sampleUrl: "/sounds/psy-kick-01.wav",
+      layerAGain: 0.9,
+      layerBEnabled: true,
+      layerBCarrierType: "pink-noise",
+      layerBGain: 0.2,
+      layerBSampleUrl: null,
+      attack: 0.003,
+      decay: 0.05,
+      dutyCycle: 0.25,
+      leftGain: 0.9,
+      rightGain: 0.9,
+      panMode: "hard",
+    },
+  },
+  {
+    name: "techno-hypnosis",
+    label: "Techno Hypnosis",
+    description: "4 Hz mirrored techno kick + deep 60 Hz sine reinforcement",
+    params: {
+      pattern: "mirrored-overlap",
+      rate: 4,
+      carrierType: "sample",
+      sampleUrl: "/sounds/techno-kick-01.wav",
+      layerAGain: 0.88,
+      layerBEnabled: true,
+      layerBCarrierType: "sine",
+      layerBCarrierFrequency: 60,
+      layerBGain: 0.3,
+      layerBSampleUrl: null,
+      attack: 0.003,
+      decay: 0.08,
+      dutyCycle: 0.35,
+      leftGain: 0.85,
+      rightGain: 0.85,
+      panMode: "hard",
+    },
+  },
+  {
+    name: "goa-trance-theta",
+    label: "Goa Trance Theta",
+    description: "5 Hz clustered hat bursts + brown noise for theta entrainment",
+    params: {
+      pattern: "clustered",
+      rate: 5,
+      carrierType: "sample",
+      sampleUrl: "/sounds/closed-hat-01.wav",
+      layerAGain: 0.8,
+      layerBEnabled: true,
+      layerBCarrierType: "brown-noise",
+      layerBGain: 0.25,
+      layerBSampleUrl: null,
+      attack: 0.002,
+      decay: 0.03,
+      dutyCycle: 0.2,
+      leftGain: 0.85,
+      rightGain: 0.85,
+      panMode: "hard",
+      clusterBurstCount: 4,
+      clusterBurstRate: 16,
+      clusterPauseDuration: 0.2,
+    },
+  },
+  {
+    name: "acid-bath",
+    label: "Acid Bath",
+    description: "Asymmetric acid loop L4/R6 Hz with deep sub rumble layer",
+    params: {
+      pattern: "asymmetric",
+      rate: 4,
+      carrierType: "sample",
+      sampleUrl: "/sounds/acid-loop-303.wav",
+      layerAGain: 0.8,
+      layerBEnabled: true,
+      layerBCarrierType: "sample",
+      layerBSampleUrl: "/sounds/rumble-sub-01.wav",
+      layerBGain: 0.4,
+      attack: 0.01,
+      decay: 0.12,
+      dutyCycle: 0.5,
+      leftGain: 0.85,
+      rightGain: 0.85,
+      panMode: "smooth",
+      asymmetricLeftRate: 4,
+      asymmetricRightRate: 6,
+    },
+  },
+  {
+    name: "dub-techno",
+    label: "Dub Techno",
+    description: "2.4 Hz heartbeat sub kick + filtered pink noise for delta dub groove",
+    params: {
+      pattern: "heartbeat",
+      rate: 2.4,
+      carrierType: "sample",
+      sampleUrl: "/sounds/117493__zesoundresearchinc__kick-28-subwoofer-test.wav",
+      layerAGain: 0.9,
+      layerBEnabled: true,
+      layerBCarrierType: "pink-noise",
+      layerBGain: 0.15,
+      layerBSampleUrl: null,
+      attack: 0.003,
+      decay: 0.1,
+      dutyCycle: 0.3,
+      leftGain: 0.8,
+      rightGain: 0.8,
+      panMode: "smooth",
+    },
+  },
+  {
+    name: "progressive-roll",
+    label: "Progressive Roll",
+    description: "4 Hz bilateral roll with hard kick + low sine — progressive trance vibe",
+    params: {
+      pattern: "bilateral-roll",
+      rate: 4,
+      carrierType: "sample",
+      sampleUrl: "/sounds/536545__angelkunev__hard-drum-kick-destroyer.wav",
+      layerAGain: 0.88,
+      layerBEnabled: true,
+      layerBCarrierType: "sine",
+      layerBCarrierFrequency: 90,
+      layerBGain: 0.3,
+      layerBSampleUrl: null,
+      attack: 0.003,
+      decay: 0.06,
+      dutyCycle: 0.28,
+      leftGain: 0.9,
+      rightGain: 0.9,
+      panMode: "hard",
+    },
+  },
+  {
+    name: "shamanic-clap",
+    label: "Shamanic Clap",
+    description: "2 Hz clap alternation + shaker layer — tribal bilateral groove",
+    params: {
+      pattern: "pure-alternation",
+      rate: 2,
+      carrierType: "sample",
+      sampleUrl: "/sounds/clap-808.wav",
+      layerAGain: 0.85,
+      layerBEnabled: true,
+      layerBCarrierType: "sample",
+      layerBSampleUrl: "/sounds/shaker-01.wav",
+      layerBGain: 0.45,
+      attack: 0.002,
+      decay: 0.07,
+      dutyCycle: 0.2,
+      leftGain: 0.85,
+      rightGain: 0.85,
+      panMode: "hard",
+    },
+  },
+  {
+    name: "dark-psy",
+    label: "Dark Psy Beta",
+    description: "Randomized beta kick pulses — dark forest psytrance entrainment",
+    params: {
+      pattern: "randomized",
+      rate: 6,
+      carrierType: "sample",
+      sampleUrl: "/sounds/536545__angelkunev__hard-drum-kick-destroyer.wav",
+      layerAGain: 0.9,
+      layerBEnabled: false,
+      attack: 0.002,
+      decay: 0.04,
+      dutyCycle: 0.2,
+      leftGain: 0.9,
+      rightGain: 0.9,
+      panMode: "hard",
+      randomMinInterval: 0.08,
+      randomMaxInterval: 0.18,
     },
   },
 ];

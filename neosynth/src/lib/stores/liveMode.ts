@@ -64,6 +64,22 @@ export interface PatchSnapshot {
   bpm: number;
 }
 
+/** Auto-arrange scene: cycles through 4 snapshot slots on a bar counter. */
+export interface Scene {
+  /** Snapshot slot index (0–7) or null to freeze on current patch. */
+  slots: [number | null, number | null, number | null, number | null];
+  /** Bars spent on each slot before advancing. */
+  barsPerSlot: number;
+  /** Morph duration (in bars) at the end of each slot's window. */
+  morphBars: number;
+}
+
+export const DEFAULT_SCENE: Scene = {
+  slots: [null, null, null, null],
+  barsPerSlot: 16,
+  morphBars: 4,
+};
+
 // Mod destination specs: [range, min, max]
 const DEST_SPEC: Record<ModDestId, [number, number, number]> = {
   rate:                    [29.5, 0.5,  30],
@@ -159,6 +175,12 @@ export interface LiveModeContextValue {
   morphMode: boolean;
   setMorphMode: (v: boolean) => void;
   activeSnapshot: number | null;
+
+  scene: Scene;
+  updateScene: (patch: Partial<Scene>) => void;
+  sceneArmed: boolean;
+  setSceneArmed: (v: boolean) => void;
+  sceneCurrentSlot: 0 | 1 | 2 | 3;
 }
 
 const LiveModeContext = createContext<LiveModeContextValue | null>(null);
@@ -216,6 +238,9 @@ export function LiveModeProvider({
   const [morphTime, setMorphTime] = useState(() => loadPersisted<number>("morphTime", 2));
   const [morphMode, setMorphMode] = useState(false);
   const [activeSnapshot, setActiveSnapshot] = useState<number | null>(null);
+  const [scene, setScene] = useState<Scene>(() => loadPersisted<Scene>("scene", DEFAULT_SCENE));
+  const [sceneArmed, setSceneArmedState] = useState(false);
+  const [sceneCurrentSlot, setSceneCurrentSlot] = useState<0 | 1 | 2 | 3>(0);
 
   useEffect(() => { savePersistedDebounced("bpm", bpm); }, [bpm]);
   useEffect(() => { savePersistedDebounced("lfo1", lfo1); }, [lfo1]);
@@ -226,6 +251,7 @@ export function LiveModeProvider({
   useEffect(() => { savePersistedDebounced("fx", fx); }, [fx]);
   useEffect(() => { savePersistedDebounced("snapshots", snapshots); }, [snapshots]);
   useEffect(() => { savePersistedDebounced("morphTime", morphTime); }, [morphTime]);
+  useEffect(() => { savePersistedDebounced("scene", scene); }, [scene]);
 
   // Refs for control loop (avoids stale closures)
   const lfo1Ref = useRef(new LFO(lfo1));
@@ -243,6 +269,15 @@ export function LiveModeProvider({
     from: SynthParams; to: SynthParams; startMs: number; durationMs: number;
   } | null>(null);
 
+  // Scene auto-advance state (refs so controlLoop sees live values).
+  const sceneRef = useRef(scene);
+  const sceneArmedRef = useRef(sceneArmed);
+  const sceneCurrentSlotRef = useRef<0 | 1 | 2 | 3>(0);
+  const sceneBarAccumRef = useRef(0);       // bars accumulated on current slot
+  const sceneMorphFiredRef = useRef(false); // has this slot's morph already fired?
+  const snapshotsRef = useRef(snapshots);
+  const recallSnapshotRef = useRef<((slot: number, morphSec: number) => void) | null>(null);
+
   // Keep refs in sync
   useEffect(() => { modRoutingsRef.current = modRoutings; }, [modRoutings]);
   useEffect(() => { macrosRef.current = macros; }, [macros]);
@@ -251,6 +286,9 @@ export function LiveModeProvider({
   useEffect(() => { lfo1Ref.current.state = lfo1; }, [lfo1]);
   useEffect(() => { lfo2Ref.current.state = lfo2; }, [lfo2]);
   useEffect(() => { seqRef.current.state = seq; }, [seq]);
+  useEffect(() => { sceneRef.current = scene; }, [scene]);
+  useEffect(() => { sceneArmedRef.current = sceneArmed; }, [sceneArmed]);
+  useEffect(() => { snapshotsRef.current = snapshots; }, [snapshots]);
 
   // Create / destroy FX rack when entering/leaving live mode
   useEffect(() => {
@@ -282,7 +320,7 @@ export function LiveModeProvider({
   // Apply FX state changes to the rack (also re-applied whenever BPM changes
   // so clock-synced delay time tracks tempo).
   useEffect(() => {
-    if (fxRackRef.current) fxRackRef.current.applyState(fx, bpm);
+    if (fxRackRef.current) fxRackRef.current.applyState(fx);
   }, [fx, bpm]);
 
   // ─── Control loop ──────────────────────────────────────────────────────────
@@ -340,6 +378,35 @@ export function LiveModeProvider({
       const lerped = lerpSynthParams(m.from, m.to, progress);
       setSynthParams(lerped);
       if (progress >= 1) morphRef.current = null;
+    }
+
+    // Scene auto-advance: track bars, fire morph at (barsPerSlot - morphBars),
+    // advance slot at barsPerSlot. Empty slots freeze on current patch.
+    if (sceneArmedRef.current) {
+      const sc = sceneRef.current;
+      const secsPerBar = (60 / bpmVal) * 4;
+      const barDelta = delta / secsPerBar;
+      sceneBarAccumRef.current += barDelta;
+
+      const morphTriggerBar = Math.max(0, sc.barsPerSlot - sc.morphBars);
+
+      if (!sceneMorphFiredRef.current && sceneBarAccumRef.current >= morphTriggerBar) {
+        const nextIdx = ((sceneCurrentSlotRef.current + 1) % 4) as 0 | 1 | 2 | 3;
+        const nextSlot = sc.slots[nextIdx];
+        if (nextSlot !== null && snapshotsRef.current[nextSlot] && recallSnapshotRef.current) {
+          const morphSec = sc.morphBars * secsPerBar;
+          recallSnapshotRef.current(nextSlot, morphSec);
+        }
+        sceneMorphFiredRef.current = true;
+      }
+
+      if (sceneBarAccumRef.current >= sc.barsPerSlot) {
+        sceneBarAccumRef.current = 0;
+        sceneMorphFiredRef.current = false;
+        const nextIdx = ((sceneCurrentSlotRef.current + 1) % 4) as 0 | 1 | 2 | 3;
+        sceneCurrentSlotRef.current = nextIdx;
+        setSceneCurrentSlot(nextIdx);
+      }
     }
   }, [isPlaying, setSynthParams]);
 
@@ -501,6 +568,32 @@ export function LiveModeProvider({
     });
   }, [setSynthParams]);
 
+  // Expose recall to controlLoop via ref (breaks declaration-order dependency).
+  useEffect(() => { recallSnapshotRef.current = recallSnapshot; }, [recallSnapshot]);
+
+  // Scene API
+  const updateScene = useCallback((patch: Partial<Scene>) => {
+    setScene((prev) => ({ ...prev, ...patch }));
+  }, []);
+
+  const setSceneArmed = useCallback((v: boolean) => {
+    setSceneArmedState(v);
+    if (!v) {
+      sceneBarAccumRef.current = 0;
+      sceneMorphFiredRef.current = false;
+      sceneCurrentSlotRef.current = 0;
+      setSceneCurrentSlot(0);
+    }
+  }, []);
+
+  // Reset scene counters whenever transport stops.
+  useEffect(() => {
+    if (!isPlaying) {
+      sceneBarAccumRef.current = 0;
+      sceneMorphFiredRef.current = false;
+    }
+  }, [isPlaying]);
+
   // Recording
   const startRecording = useCallback(async () => {
     if (liveRecorder.isRecording) return;
@@ -540,11 +633,15 @@ export function LiveModeProvider({
     seq, updateSeq, seqStep,
     modRoutings, addRouting, updateRouting, removeRouting, clearAllRoutings,
     macros, updateMacro, setMacroValue,
+    getLfo1Phase, getLfo2Phase,
     fx, updateFx, triggerPad, getMeterAnalyser, getStereoMeter,
     snapshots, saveSnapshot, recallSnapshot,
     morphTime, setMorphTime,
     morphMode, setMorphMode,
     activeSnapshot,
+    scene, updateScene,
+    sceneArmed, setSceneArmed,
+    sceneCurrentSlot,
   };
 
   return createElement(LiveModeContext.Provider, { value }, children);

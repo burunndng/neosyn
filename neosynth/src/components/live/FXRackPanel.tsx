@@ -1,4 +1,5 @@
 import { useLiveMode } from "@/lib/stores/liveMode";
+import { useSynthParams } from "@/lib/stores/params";
 import { Knob } from "./Knob";
 import { CLOCK_DIVISIONS } from "@/lib/audio/MasterClock";
 import type { ClockDivision } from "@/lib/audio/MasterClock";
@@ -86,6 +87,7 @@ function SyncRow({
 
 export function FXRackPanel() {
   const { fx, updateFx } = useLiveMode();
+  const { params, updateParam } = useSynthParams();
 
   return (
     <div className="flex flex-col gap-2">
@@ -345,6 +347,35 @@ export function FXRackPanel() {
           <span style={{ fontSize: 7, color: DIM, fontFamily: "'JetBrains Mono', monospace", textAlign: "center" }}>
             {fx.limiterEnabled ? "LIMITER ON" : "NO LIMITER"}
           </span>
+        </FxModule>
+
+        {/* Sidechain — Layer A pulses duck Layer B (bilateral polyrhythm pump) */}
+        <FxModule
+          label="A→B DUCK"
+          enabled={params.sidechainEnabled}
+          onToggle={() => updateParam("sidechainEnabled", !params.sidechainEnabled)}
+          width={120}
+        >
+          <div className="flex justify-around">
+            <Knob
+              value={params.sidechainDepth}
+              min={0}
+              max={1}
+              size={40}
+              label="DEPTH"
+              valueLabel={params.sidechainDepth.toFixed(2)}
+              onChange={(v) => updateParam("sidechainDepth", v)}
+            />
+            <Knob
+              value={params.sidechainDuration}
+              min={0.05}
+              max={0.3}
+              size={40}
+              label="DUR"
+              valueLabel={`${(params.sidechainDuration * 1000).toFixed(0)}ms`}
+              onChange={(v) => updateParam("sidechainDuration", v)}
+            />
+          </div>
         </FxModule>
       </div>
     </div>

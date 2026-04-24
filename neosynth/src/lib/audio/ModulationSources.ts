@@ -88,8 +88,10 @@ export class LFO {
 // ─── Step Sequencer ──────────────────────────────────────────────────────────
 
 export interface SequencerState {
-  steps: number[];    // 16 values, each 0–1
-  gates: boolean[];   // 16 gate booleans
+  steps: number[];         // 16 values, each 0–1
+  gates: boolean[];        // 16 gate booleans
+  probabilities: number[]; // 16 values 0–1; gate fires only if random() < probability
+  swing: number;           // 0–0.5: pushes odd steps later by (swing × stepDuration)
   currentStep: number;
   syncDiv: ClockDivision;
   running: boolean;
@@ -99,6 +101,8 @@ export function defaultSequencerState(): SequencerState {
   return {
     steps: Array(16).fill(0.5),
     gates: Array(16).fill(true),
+    probabilities: Array(16).fill(1),
+    swing: 0,
     currentStep: 0,
     syncDiv: "1/8",
     running: true,
@@ -120,20 +124,30 @@ export class StepSequencer {
       return { value: this.state.steps[this._currentStep], gate: false, step: this._currentStep, advanced: false };
     }
 
-    const stepDuration = 60 / (bpm * DIVISION_MULTIPLIERS[this.state.syncDiv]);
+    const baseStepDuration = 60 / (bpm * DIVISION_MULTIPLIERS[this.state.syncDiv]);
+    const swing = Math.max(0, Math.min(0.5, this.state.swing ?? 0));
+    // Even steps are shorter, odd steps are longer (MPC-style swing)
+    const effectiveDuration = this._currentStep % 2 === 0
+      ? baseStepDuration * (1 - swing * 0.5)
+      : baseStepDuration * (1 + swing * 0.5);
+
     this.accumulator += deltaSeconds;
 
     let advanced = false;
-    while (this.accumulator >= stepDuration) {
-      this.accumulator -= stepDuration;
+    while (this.accumulator >= effectiveDuration) {
+      this.accumulator -= effectiveDuration;
       this._currentStep = (this._currentStep + 1) % 16;
       this.state.currentStep = this._currentStep;
       advanced = true;
     }
 
+    const rawGate = this.state.gates[this._currentStep];
+    const prob = this.state.probabilities?.[this._currentStep] ?? 1;
+    const gate = rawGate && (prob >= 1 || Math.random() < prob);
+
     return {
       value: this.state.steps[this._currentStep],
-      gate: this.state.gates[this._currentStep],
+      gate,
       step: this._currentStep,
       advanced,
     };
