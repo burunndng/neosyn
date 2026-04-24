@@ -1,4 +1,5 @@
 import { useLiveMode } from "@/lib/stores/liveMode";
+import { useSynthParams } from "@/lib/stores/params";
 import { Knob } from "./Knob";
 import { CLOCK_DIVISIONS } from "@/lib/audio/MasterClock";
 import type { ClockDivision } from "@/lib/audio/MasterClock";
@@ -7,6 +8,7 @@ const ACCENT = "hsl(192,87%,53%)";
 
 export function FXRackPanel() {
   const { fx, updateFx } = useLiveMode();
+  const { params, updateParam } = useSynthParams();
 
   return (
     <div className="flex gap-3">
@@ -168,6 +170,46 @@ export function FXRackPanel() {
           valueLabel={fx.reverbWet.toFixed(2)}
           onChange={(v) => updateFx({ reverbWet: v })}
         />
+      </div>
+
+      {/* Sidechain — Layer A pulses duck Layer B */}
+      <div className="flex flex-col gap-1.5 p-2 rounded" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", minWidth: 110 }}>
+        <div className="flex items-center justify-between">
+          <span style={{ fontSize: 10, color: ACCENT, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>SIDECHAIN</span>
+          <button
+            onClick={() => updateParam("sidechainEnabled", !params.sidechainEnabled)}
+            style={{
+              width: 16, height: 16, borderRadius: 2,
+              background: params.sidechainEnabled ? "rgba(34,211,238,0.12)" : "rgba(255,255,255,0.06)",
+              border: `1px solid ${params.sidechainEnabled ? ACCENT : "rgba(255,255,255,0.1)"}`,
+              color: params.sidechainEnabled ? ACCENT : "rgba(255,255,255,0.3)",
+              fontSize: 7, cursor: "pointer", fontFamily: "'JetBrains Mono', monospace",
+            }}
+            title="Duck Layer B on every Layer A pulse"
+          >
+            {params.sidechainEnabled ? "ON" : "OF"}
+          </button>
+        </div>
+        <div className="flex justify-around">
+          <Knob
+            value={params.sidechainDepth}
+            min={0}
+            max={1}
+            size={40}
+            label="DEPTH"
+            valueLabel={params.sidechainDepth.toFixed(2)}
+            onChange={(v) => updateParam("sidechainDepth", v)}
+          />
+          <Knob
+            value={params.sidechainDuration}
+            min={0.05}
+            max={0.3}
+            size={40}
+            label="DUR"
+            valueLabel={`${(params.sidechainDuration * 1000).toFixed(0)}ms`}
+            onChange={(v) => updateParam("sidechainDuration", v)}
+          />
+        </div>
       </div>
     </div>
   );

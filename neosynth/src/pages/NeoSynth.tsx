@@ -971,6 +971,14 @@ export function NeoSynth() {
               onChange={(v) => updateParam("dutyCycle", v)}
               testId="slider-duty"
             />
+            <SliderRow
+              label="SWING"
+              value={params.swing}
+              display={`${Math.round(params.swing * 200)}%`}
+              min={0} max={0.5} step={0.01}
+              onChange={(v) => updateParam("swing", v)}
+              testId="slider-swing"
+            />
           </Section>
 
           {/* Channel Gains */}
