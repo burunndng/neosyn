@@ -179,7 +179,7 @@ export class EnvelopeFollower {
 
   tick(): number {
     if (!this.analyser || !this.buffer) return 0;
-    this.analyser.getByteFrequencyData(this.buffer as Uint8Array<ArrayBuffer>);
+    this.analyser.getByteFrequencyData(this.buffer as any);
     let sum = 0;
     for (let i = 0; i < this.buffer.length; i++) sum += this.buffer[i];
     this.currentValue = sum / (this.buffer.length * 255);

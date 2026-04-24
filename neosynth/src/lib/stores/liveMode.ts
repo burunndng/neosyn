@@ -12,7 +12,7 @@ import {
 } from "../audio/ModulationSources";
 import type { LFOState, SequencerState } from "../audio/ModulationSources";
 import { FXRack, DEFAULT_FX_STATE } from "../audio/FXRack";
-import type { FXState } from "../audio/FXRack";
+import type { FXState, PadId } from "../audio/FXRack";
 import { liveRecorder } from "../audio/LiveRecorder";
 import { audioEngine } from "../audio/AudioEngine";
 import type { SynthParams } from "../audio/AudioEngine";
@@ -28,6 +28,7 @@ export type ModDestId =
   | "carrierFrequency" | "layerBCarrierFrequency"
   | "layerAGain" | "layerBGain" | "leftGain" | "rightGain"
   | "hpfFreq" | "lpfFreq" | "delayTime" | "delayFeedback" | "delayWet" | "reverbWet"
+  | "driveAmount" | "crushBits" | "widthAmount" | "gateDepth" | "pumpDepth" | "masterGain"
   | "macro1" | "macro2" | "macro3" | "macro4";
 
 /** depth –1..+1, added to normalised source value to compute final offset */
@@ -97,6 +98,12 @@ const DEST_SPEC: Record<ModDestId, [number, number, number]> = {
   delayFeedback:           [0.95, 0,    0.95],
   delayWet:                [1,    0,    1],
   reverbWet:               [1,    0,    1],
+  driveAmount:             [1,    0,    1],
+  crushBits:               [11,   1,    12],
+  widthAmount:             [2,    0,    2],
+  gateDepth:               [1,    0,    1],
+  pumpDepth:               [1,    0,    1],
+  masterGain:              [1.5,  0,    1.5],
   macro1:                  [1,    0,    1],
   macro2:                  [1,    0,    1],
   macro3:                  [1,    0,    1],
@@ -156,6 +163,9 @@ export interface LiveModeContextValue {
 
   fx: FXState;
   updateFx: (patch: Partial<FXState>) => void;
+  triggerPad: (pad: PadId) => void;
+  getMeterAnalyser: () => AnalyserNode | null;
+  getStereoMeter: () => { l: AnalyserNode; r: AnalyserNode } | null;
 
   snapshots: (PatchSnapshot | null)[];
   saveSnapshot: (slot: number, label: string, synthParams: SynthParams) => void;
@@ -310,7 +320,7 @@ export function LiveModeProvider({
   // Apply FX state changes to the rack (also re-applied whenever BPM changes
   // so clock-synced delay time tracks tempo).
   useEffect(() => {
-    if (fxRackRef.current) fxRackRef.current.applyState(fx, bpm);
+    if (fxRackRef.current) fxRackRef.current.applyState(fx);
   }, [fx, bpm]);
 
   // ─── Control loop ──────────────────────────────────────────────────────────
@@ -356,6 +366,10 @@ export function LiveModeProvider({
     }
 
     applyModulationDeltas(deltas, synthParamsRef.current, fxStateRef.current, macrosRef.current);
+    applyFxModulationDeltas(deltas, fxStateRef.current, fxRackRef.current);
+
+    // Re-schedule trance gate + sidechain pump ahead of the play cursor.
+    if (fxRackRef.current) fxRackRef.current.tickRhythmicFX(bpmVal);
 
     // Handle snapshot morph
     if (morphRef.current) {
@@ -481,6 +495,23 @@ export function LiveModeProvider({
     setFx((prev) => ({ ...prev, ...patch }));
   }, []);
 
+  const triggerPad = useCallback((pad: PadId) => {
+    if (fxRackRef.current) {
+      fxRackRef.current.triggerPad(pad, masterClock.bpm);
+      liveRecorder.log("pad", { pad, bpm: masterClock.bpm });
+    }
+  }, []);
+
+  const getMeterAnalyser = useCallback(() => {
+    return fxRackRef.current?.meterAnalyser ?? null;
+  }, []);
+
+  const getStereoMeter = useCallback(() => {
+    const rack = fxRackRef.current;
+    if (!rack) return null;
+    return { l: rack.meterAnalyserL, r: rack.meterAnalyserR };
+  }, []);
+
   const saveSnapshot = useCallback((slot: number, label: string, sp: SynthParams) => {
     const snap: PatchSnapshot = {
       label,
@@ -603,7 +634,7 @@ export function LiveModeProvider({
     modRoutings, addRouting, updateRouting, removeRouting, clearAllRoutings,
     macros, updateMacro, setMacroValue,
     getLfo1Phase, getLfo2Phase,
-    fx, updateFx,
+    fx, updateFx, triggerPad, getMeterAnalyser, getStereoMeter,
     snapshots, saveSnapshot, recallSnapshot,
     morphTime, setMorphTime,
     morphMode, setMorphMode,
@@ -693,6 +724,54 @@ function applyModulationDeltas(
     }
     if (dest === "rightGain") {
       graph.rightLevel.gain.setTargetAtTime(clamp(base.rightGain + delta * range, min, max), t, TC);
+      continue;
+    }
+  }
+}
+
+function applyFxModulationDeltas(
+  deltas: Partial<Record<ModDestId, number>>,
+  fx: FXState,
+  rack: FXRack | null,
+) {
+  if (!rack) return;
+  const now = rack.input.context.currentTime;
+  const TC = 0.012;
+
+  for (const [destRaw, delta] of Object.entries(deltas)) {
+    const dest = destRaw as ModDestId;
+    const spec = DEST_SPEC[dest];
+    if (!spec) continue;
+    const [range, min, max] = spec;
+
+    if (dest === "driveAmount") {
+      const v = clamp(fx.driveAmount + delta * range, min, max);
+      rack.applyState({ ...fx, driveAmount: v });
+      continue;
+    }
+    if (dest === "crushBits") {
+      const v = clamp(fx.crushBits + delta * range, min, max);
+      rack.applyState({ ...fx, crushBits: v });
+      continue;
+    }
+    if (dest === "widthAmount") {
+      const v = clamp(fx.widthAmount + delta * range, min, max);
+      rack.applyState({ ...fx, widthAmount: v });
+      continue;
+    }
+    if (dest === "gateDepth") {
+      const v = clamp(fx.gateDepth + delta * range, min, max);
+      rack.applyState({ ...fx, gateDepth: v });
+      continue;
+    }
+    if (dest === "pumpDepth") {
+      const v = clamp(fx.pumpDepth + delta * range, min, max);
+      rack.applyState({ ...fx, pumpDepth: v });
+      continue;
+    }
+    if (dest === "masterGain") {
+      const v = clamp(fx.masterGain + delta * range, min, max);
+      rack.masterGainNode.gain.setTargetAtTime(v, now, TC);
       continue;
     }
   }
