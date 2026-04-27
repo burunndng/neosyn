@@ -12,6 +12,7 @@ export function ClockPanel() {
     isPlaying, setIsPlaying,
     isRecording, startRecording, stopRecording,
     sceneArmed, setSceneArmed,
+    uiMode, setUiMode,
   } = useLiveMode();
   const { masterVolume, setMasterVolume } = useSynthParams();
 
@@ -165,11 +166,32 @@ export function ClockPanel() {
       </div>
 
       {isRecording && (
-        <div className="flex items-center gap-1.5 ml-auto">
+        <div className="flex items-center gap-1.5">
           <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#ef4444", display: "inline-block" }} className="animate-pulse" />
           <span style={{ fontSize: 10, color: "#ef4444", fontFamily: "'JetBrains Mono', monospace" }}>REC</span>
         </div>
       )}
+
+      {/* Mode toggle button */}
+      <button
+        onClick={() => setUiMode(uiMode === 'pro' ? 'dj' : 'pro')}
+        style={{
+          marginLeft: "auto",
+          padding: "4px 12px",
+          borderRadius: 3,
+          background: "rgba(255,255,255,0.06)",
+          border: "1px solid rgba(255,255,255,0.1)",
+          color: "rgba(255,255,255,0.7)",
+          fontSize: 9,
+          fontFamily: "'JetBrains Mono', monospace",
+          fontWeight: 600,
+          cursor: "pointer",
+          letterSpacing: "0.08em",
+        }}
+        title="Toggle UI mode (Pro ↔ DJ)"
+      >
+        {uiMode === 'pro' ? 'PRO' : 'DJ'} / {uiMode === 'pro' ? 'DJ' : 'PRO'}
+      </button>
     </div>
   );
 }

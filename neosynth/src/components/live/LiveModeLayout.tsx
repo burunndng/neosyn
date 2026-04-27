@@ -1,22 +1,14 @@
 import { useEffect, useState } from "react";
 import { useLiveMode } from "@/lib/stores/liveMode";
 import { ClockPanel } from "./ClockPanel";
-import { LFOPanel } from "./LFOPanel";
-import { SequencerPanel } from "./SequencerPanel";
-import { ModMatrixPanel } from "./ModMatrixPanel";
-import { MacroKnobs } from "./MacroKnobs";
-import { FXRackPanel } from "./FXRackPanel";
-import { LayerRhythmPanel } from "./LayerRhythmPanel";
-import { SnapshotBank } from "./SnapshotBank";
-import { SceneStrip } from "./SceneStrip";
-import { PerformancePads } from "./PerformancePads";
-import { OutputMeter } from "./OutputMeter";
+import { ProModeLayout } from "./ProModeLayout";
+import { DJModeLayout } from "./DJModeLayout";
 import { HelpCircle } from "lucide-react";
 
 const ACCENT = "hsl(192,87%,53%)";
 
 export function LiveModeLayout() {
-  const { tapTempo, setIsPlaying, isPlaying, snapshots, recallSnapshot, morphTime, morphMode, setMorphMode } = useLiveMode();
+  const { tapTempo, setIsPlaying, isPlaying, snapshots, recallSnapshot, morphTime, morphMode, setMorphMode, uiMode, setUiMode } = useLiveMode();
   const [showHelp, setShowHelp] = useState(false);
 
   // Keyboard shortcuts
@@ -88,46 +80,69 @@ export function LiveModeLayout() {
         color: "rgba(255,255,255,0.8)",
       }}
     >
-      {/* Top: Clock + Transport */}
-      <ClockPanel />
+      {/* Top: Clock + Transport (Pro mode) or DJ Transport (DJ mode) */}
+      {uiMode === 'pro' && <ClockPanel />}
 
-      {/* Middle: Mod sources + Mod matrix + Knobs + FX */}
-      <div className="flex flex-col gap-4 p-4 flex-1 overflow-y-auto">
-        {/* Mod sources */}
-        <div className="flex gap-4 live-row-modulation">
-          <LFOPanel />
-          <SequencerPanel />
-          <LayerRhythmPanel />
-        </div>
-
-        {/* Mod matrix + Macros + Meter side-by-side */}
-        <div className="flex gap-4">
-          <div className="flex-1">
-            <ModMatrixPanel />
+      {/* Mode selector + Help button header (only in DJ mode) */}
+      {uiMode === 'dj' && (
+        <div
+          className="flex items-center gap-3 px-4 py-2 shrink-0"
+          style={{
+            background: "#0e1016",
+            borderBottom: "1px solid rgba(255,255,255,0.06)",
+            justifyContent: "space-between",
+          }}
+        >
+          <span style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.08em" }}>
+            NEOSYNTH
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setUiMode('pro')}
+              style={{
+                padding: "4px 12px",
+                borderRadius: 3,
+                background: "rgba(255,255,255,0.06)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                color: "rgba(255,255,255,0.7)",
+                fontSize: 9,
+                fontFamily: "'JetBrains Mono', monospace",
+                fontWeight: 600,
+                cursor: "pointer",
+                letterSpacing: "0.08em",
+              }}
+              title="Toggle UI mode"
+            >
+              DJ / PRO
+            </button>
+            <button
+              onClick={() => setShowHelp(!showHelp)}
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 3,
+                background: "rgba(255,255,255,0.06)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                color: ACCENT,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              title="Help (? key)"
+            >
+              ?
+            </button>
           </div>
-          <div className="flex flex-col gap-3 items-stretch" style={{ minWidth: 360 }}>
-            <div className="flex flex-col gap-2 items-center p-2 rounded" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
-              <span style={{ fontSize: 9, color: ACCENT, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, letterSpacing: "0.12em" }}>MACROS</span>
-              <MacroKnobs />
-            </div>
-            <OutputMeter />
-          </div>
         </div>
+      )}
 
-        {/* FX Rack */}
-        <div>
-          <FXRackPanel />
-        </div>
-
-        {/* Performance Pads */}
-        <PerformancePads />
-
-        {/* Snapshots */}
-        <SnapshotBank />
-
-        {/* Scene auto-arrange */}
-        <SceneStrip />
-      </div>
+      {/* Content area: conditional based on UI mode */}
+      {uiMode === 'pro' ? (
+        <ProModeLayout />
+      ) : (
+        <DJModeLayout />
+      )}
 
       {/* Help overlay */}
       {showHelp && (
@@ -151,7 +166,7 @@ export function LiveModeLayout() {
               padding: 20,
               maxWidth: 500,
               maxHeight: "80vh",
-              overflow: "y-auto",
+              overflowY: "auto",
             }}
             onClick={(e) => e.stopPropagation()}
           >
