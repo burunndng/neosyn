@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Play, Square, Circle, StopCircle } from "lucide-react";
 import { useLiveMode } from "@/lib/stores/liveMode";
 import { useSynthParams } from "@/lib/stores/params";
-import { Play, Square, Circle, StopCircle } from "lucide-react";
 import { LFOPanel } from "./LFOPanel";
 import { SequencerPanel } from "./SequencerPanel";
 import { ModMatrixPanel } from "./ModMatrixPanel";
@@ -25,8 +24,6 @@ export function DJModeLayout() {
     sceneArmed, setSceneArmed,
     morphMode, setMorphMode,
     morphTime, setMorphTime,
-    snapshots,
-    recallSnapshot,
   } = useLiveMode();
   const { masterVolume, setMasterVolume } = useSynthParams();
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -209,7 +206,7 @@ export function DJModeLayout() {
             {morphMode ? "MORPH: ON" : "MORPH: OFF"}
           </button>
           <div className="flex items-center gap-2">
-            <span style={{ fontSize: 9, color: "rgba(255,255,255,0.4)" }}>Time (bars):</span>
+            <span style={{ fontSize: 9, color: "rgba(255,255,255,0.4)" }}>Time (sec):</span>
             <input
               type="number"
               min={0}

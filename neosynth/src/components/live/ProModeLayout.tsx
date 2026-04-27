@@ -1,6 +1,3 @@
-import { HelpCircle } from "lucide-react";
-import { useLiveMode } from "@/lib/stores/liveMode";
-import { ClockPanel } from "./ClockPanel";
 import { LFOPanel } from "./LFOPanel";
 import { SequencerPanel } from "./SequencerPanel";
 import { ModMatrixPanel } from "./ModMatrixPanel";
@@ -14,13 +11,7 @@ import { OutputMeter } from "./OutputMeter";
 
 const ACCENT = "hsl(192,87%,53%)";
 
-export function ProModeLayout({
-  showHelp,
-  setShowHelp,
-}: {
-  showHelp: boolean;
-  setShowHelp: (v: boolean) => void;
-}) {
+export function ProModeLayout() {
   return (
     <div className="flex flex-col gap-4 p-4 flex-1 overflow-y-auto">
       {/* Mod sources */}

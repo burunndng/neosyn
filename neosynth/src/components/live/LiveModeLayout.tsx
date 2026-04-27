@@ -139,7 +139,7 @@ export function LiveModeLayout() {
 
       {/* Content area: conditional based on UI mode */}
       {uiMode === 'pro' ? (
-        <ProModeLayout showHelp={showHelp} setShowHelp={setShowHelp} />
+        <ProModeLayout />
       ) : (
         <DJModeLayout />
       )}
@@ -166,7 +166,7 @@ export function LiveModeLayout() {
               padding: 20,
               maxWidth: 500,
               maxHeight: "80vh",
-              overflow: "y-auto",
+              overflowY: "auto",
             }}
             onClick={(e) => e.stopPropagation()}
           >
