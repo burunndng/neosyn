@@ -134,6 +134,9 @@ export interface LiveModeContextValue {
   startRecording: () => void;
   stopRecording: () => void;
 
+  uiMode: 'pro' | 'dj';
+  setUiMode: (mode: 'pro' | 'dj') => void;
+
   bpm: number;
   setBpm: (v: number) => void;
   tapTempo: () => void;
@@ -199,6 +202,9 @@ export function LiveModeProvider({
   const [isLiveMode, setIsLiveMode] = useState(false);
   const [isPlaying, setIsPlayingState] = useState(audioEngine.getIsPlaying());
   const [isRecording, setIsRecording] = useState(false);
+  const [uiMode, setUiModeState] = useState<'pro' | 'dj'>(() =>
+    loadPersisted<'pro' | 'dj'>("uiMode", "pro"),
+  );
 
   // Single source of truth for isPlaying: the AudioEngine. Subscribe so both
   // surfaces (classic + live) stay in sync when either toggles playback.
@@ -252,6 +258,7 @@ export function LiveModeProvider({
   useEffect(() => { savePersistedDebounced("snapshots", snapshots); }, [snapshots]);
   useEffect(() => { savePersistedDebounced("morphTime", morphTime); }, [morphTime]);
   useEffect(() => { savePersistedDebounced("scene", scene); }, [scene]);
+  useEffect(() => { savePersistedDebounced("uiMode", uiMode); }, [uiMode]);
 
   // Refs for control loop (avoids stale closures)
   const lfo1Ref = useRef(new LFO(lfo1));
@@ -428,6 +435,10 @@ export function LiveModeProvider({
   }, [isLiveMode, isPlaying, controlLoop]);
 
   // ─── Public API ────────────────────────────────────────────────────────────
+
+  const setUiMode = useCallback((mode: 'pro' | 'dj') => {
+    setUiModeState(mode);
+  }, []);
 
   const setBpm = useCallback((v: number) => {
     masterClock.setBpm(v);
@@ -627,6 +638,7 @@ export function LiveModeProvider({
     isLiveMode, setIsLiveMode,
     isPlaying, setIsPlaying,
     isRecording, startRecording, stopRecording,
+    uiMode, setUiMode,
     bpm, setBpm, tapTempo,
     lfo1, updateLfo1,
     lfo2, updateLfo2,

@@ -236,6 +236,31 @@
   }
 }
 
+/* DJ Mode Touch-friendly overrides */
+[data-dj-mode="true"] {
+  --dj-touch-target: 48px;
+  --dj-pad-size: 72px;
+}
+
+[data-dj-mode="true"] button {
+  min-height: 48px;
+  min-width: 48px;
+}
+
+[data-dj-mode="true"] input[type="range"] {
+  height: 6px;
+}
+
+/* DJ mode responsive: increase font sizes and spacing on mobile */
+@media (max-width: 768px) {
+  [data-dj-mode="true"] {
+    font-size: 14px;
+  }
+  [data-dj-mode="true"] button {
+    min-height: 56px;
+  }
+}
+
 @layer base {
   * {
     @apply border-border;
