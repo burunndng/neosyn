@@ -6,6 +6,7 @@ import { SequencerPanel } from "./SequencerPanel";
 import { ModMatrixPanel } from "./ModMatrixPanel";
 import { MacroKnobs } from "./MacroKnobs";
 import { FXRackPanel } from "./FXRackPanel";
+import { LayerRhythmPanel } from "./LayerRhythmPanel";
 import { SnapshotBank } from "./SnapshotBank";
 import { SceneStrip } from "./SceneStrip";
 import { PerformancePads } from "./PerformancePads";
@@ -96,6 +97,7 @@ export function LiveModeLayout() {
         <div className="flex gap-4 live-row-modulation">
           <LFOPanel />
           <SequencerPanel />
+          <LayerRhythmPanel />
         </div>
 
         {/* Mod matrix + Macros + Meter side-by-side */}

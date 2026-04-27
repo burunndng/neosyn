@@ -4,6 +4,7 @@ import { Slider } from "@/components/ui/slider";
 import { BilateralField } from "@/components/BilateralField";
 import { audioEngine } from "@/lib/audio/AudioEngine";
 import { CLOCK_DIVISIONS } from "@/lib/audio/MasterClock";
+import type { ClockDivision } from "@/lib/audio/MasterClock";
 import {
   useSynthParams,
   RATE_PRESETS,
@@ -745,6 +746,47 @@ export function NeoSynth() {
                   </button>
                 ))}
               </div>
+
+              {/* Layer A FREE/SYNC + division */}
+              <div className="flex gap-1">
+                {(["free", "sync"] as const).map((m) => {
+                  const isActive = m === "free" ? params.layerADivision === null : params.layerADivision !== null;
+                  return (
+                    <button
+                      key={m}
+                      onClick={() => updateParam("layerADivision", m === "free" ? null : (params.layerADivision ?? "1/4"))}
+                      className="flex-1 py-0.5 rounded transition-all"
+                      style={{
+                        fontSize: 9,
+                        background: isActive ? "rgba(34,211,238,0.12)" : "transparent",
+                        border: `1px solid ${isActive ? "rgba(34,211,238,0.5)" : "rgba(255,255,255,0.07)"}`,
+                        color: isActive ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.35)",
+                      }}
+                    >
+                      {m === "free" ? "FREE" : "SYNC"}
+                    </button>
+                  );
+                })}
+              </div>
+              {params.layerADivision !== null && (
+                <div className="flex gap-1 flex-wrap">
+                  {CLOCK_DIVISIONS.map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => updateParam("layerADivision", d as ClockDivision)}
+                      className="px-1 py-0.5 rounded"
+                      style={{
+                        fontSize: 9,
+                        background: params.layerADivision === d ? "rgba(34,211,238,0.12)" : "transparent",
+                        border: `1px solid ${params.layerADivision === d ? "rgba(34,211,238,0.5)" : "rgba(255,255,255,0.07)"}`,
+                        color: params.layerADivision === d ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.4)",
+                      }}
+                    >
+                      {d}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -905,6 +947,47 @@ export function NeoSynth() {
                       </div>
                     )}
                   </div>
+
+                  {/* Layer B FREE/SYNC + division (BPM-sync override) */}
+                  <div className="flex gap-1">
+                    {(["free", "sync"] as const).map((m) => {
+                      const isActive = m === "free" ? params.layerBDivision === null : params.layerBDivision !== null;
+                      return (
+                        <button
+                          key={m}
+                          onClick={() => updateParam("layerBDivision", m === "free" ? null : (params.layerBDivision ?? "1/8"))}
+                          className="flex-1 py-0.5 rounded transition-all"
+                          style={{
+                            fontSize: 9,
+                            background: isActive ? "rgba(34,211,238,0.12)" : "transparent",
+                            border: `1px solid ${isActive ? "rgba(34,211,238,0.5)" : "rgba(255,255,255,0.07)"}`,
+                            color: isActive ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.35)",
+                          }}
+                        >
+                          {m === "free" ? "FREE" : "SYNC"}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {params.layerBDivision !== null && (
+                    <div className="flex gap-1 flex-wrap">
+                      {CLOCK_DIVISIONS.map((d) => (
+                        <button
+                          key={d}
+                          onClick={() => updateParam("layerBDivision", d as ClockDivision)}
+                          className="px-1 py-0.5 rounded"
+                          style={{
+                            fontSize: 9,
+                            background: params.layerBDivision === d ? "rgba(34,211,238,0.12)" : "transparent",
+                            border: `1px solid ${params.layerBDivision === d ? "rgba(34,211,238,0.5)" : "rgba(255,255,255,0.07)"}`,
+                            color: params.layerBDivision === d ? "hsl(192,87%,53%)" : "rgba(255,255,255,0.4)",
+                          }}
+                        >
+                          {d}
+                        </button>
+                      ))}
+                    </div>
+                  )}
 
                   {/* Independent pattern or follow A */}
                   <div className="flex flex-col gap-1">
