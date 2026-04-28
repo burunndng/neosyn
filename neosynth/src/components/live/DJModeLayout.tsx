@@ -12,6 +12,7 @@ import { SnapshotBank } from "./SnapshotBank";
 import { SceneStrip } from "./SceneStrip";
 import { PerformancePads } from "./PerformancePads";
 import { OutputMeter } from "./OutputMeter";
+import { SampleDecksPanel } from "./SampleDecksPanel";
 
 const ACCENT = "hsl(192,87%,53%)";
 const DIM = "rgba(255,255,255,0.5)";
@@ -172,6 +173,11 @@ export function DJModeLayout() {
 
       {/* ─ DJ MAIN CONTENT ─ */}
       <div className="flex flex-col gap-4 p-4 flex-1 overflow-y-auto">
+        {/* Sample Decks — main live performance surface */}
+        <div>
+          <SampleDecksPanel />
+        </div>
+
         {/* Performance Pads */}
         <div>
           <PerformancePads />

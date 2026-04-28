@@ -8,12 +8,16 @@ import { SnapshotBank } from "./SnapshotBank";
 import { SceneStrip } from "./SceneStrip";
 import { PerformancePads } from "./PerformancePads";
 import { OutputMeter } from "./OutputMeter";
+import { SampleDecksPanel } from "./SampleDecksPanel";
 
 const ACCENT = "hsl(192,87%,53%)";
 
 export function ProModeLayout() {
   return (
     <div className="flex flex-col gap-4 p-4 flex-1 overflow-y-auto">
+      {/* Sample Decks — top-level layering surface */}
+      <SampleDecksPanel />
+
       {/* Mod sources */}
       <div className="flex gap-4 live-row-modulation">
         <LFOPanel />

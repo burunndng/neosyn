@@ -16,6 +16,8 @@ import type { FXState, PadId } from "../audio/FXRack";
 import { liveRecorder } from "../audio/LiveRecorder";
 import { audioEngine } from "../audio/AudioEngine";
 import type { SynthParams } from "../audio/AudioEngine";
+import { defaultDeckState } from "../audio/SampleDeck";
+import type { DeckState } from "../audio/SampleDeck";
 import { downloadBlob } from "../utils/wavExport";
 import { loadPersisted, savePersistedDebounced } from "../utils/persist";
 
@@ -184,6 +186,13 @@ export interface LiveModeContextValue {
   sceneArmed: boolean;
   setSceneArmed: (v: boolean) => void;
   sceneCurrentSlot: 0 | 1 | 2 | 3;
+
+  // Sample decks (independent per-rhythm sample players with per-deck FX)
+  decks: DeckState[];
+  updateDeck: (idx: number, patch: Partial<DeckState>) => void;
+  toggleDeckMute: (idx: number) => void;
+  toggleDeckSolo: (idx: number) => void;
+  resetDecks: () => void;
 }
 
 const LiveModeContext = createContext<LiveModeContextValue | null>(null);
@@ -247,6 +256,12 @@ export function LiveModeProvider({
   const [scene, setScene] = useState<Scene>(() => loadPersisted<Scene>("scene", DEFAULT_SCENE));
   const [sceneArmed, setSceneArmedState] = useState(false);
   const [sceneCurrentSlot, setSceneCurrentSlot] = useState<0 | 1 | 2 | 3>(0);
+  const [decks, setDecks] = useState<DeckState[]>(() =>
+    loadPersisted<DeckState[]>(
+      "decks",
+      [0, 1, 2, 3].map((i) => defaultDeckState(i)),
+    ),
+  );
 
   useEffect(() => { savePersistedDebounced("bpm", bpm); }, [bpm]);
   useEffect(() => { savePersistedDebounced("lfo1", lfo1); }, [lfo1]);
@@ -259,6 +274,10 @@ export function LiveModeProvider({
   useEffect(() => { savePersistedDebounced("morphTime", morphTime); }, [morphTime]);
   useEffect(() => { savePersistedDebounced("scene", scene); }, [scene]);
   useEffect(() => { savePersistedDebounced("uiMode", uiMode); }, [uiMode]);
+  useEffect(() => { savePersistedDebounced("decks", decks); }, [decks]);
+
+  // Push deck state into the engine on every change so FX/scheduler stay in sync.
+  useEffect(() => { audioEngine.setDeckStates(decks); }, [decks]);
 
   // Refs for control loop (avoids stale closures)
   const lfo1Ref = useRef(new LFO(lfo1));
@@ -634,6 +653,38 @@ export function LiveModeProvider({
   const getLfo1Phase = useCallback(() => lfo1Ref.current.phase, []);
   const getLfo2Phase = useCallback(() => lfo2Ref.current.phase, []);
 
+  // Deck mutators
+  const updateDeck = useCallback((idx: number, patch: Partial<DeckState>) => {
+    setDecks((prev) => {
+      if (idx < 0 || idx >= prev.length) return prev;
+      const next = prev.slice();
+      next[idx] = { ...next[idx], ...patch };
+      return next;
+    });
+  }, []);
+
+  const toggleDeckMute = useCallback((idx: number) => {
+    setDecks((prev) => {
+      if (idx < 0 || idx >= prev.length) return prev;
+      const next = prev.slice();
+      next[idx] = { ...next[idx], mute: !next[idx].mute };
+      return next;
+    });
+  }, []);
+
+  const toggleDeckSolo = useCallback((idx: number) => {
+    setDecks((prev) => {
+      if (idx < 0 || idx >= prev.length) return prev;
+      const next = prev.slice();
+      next[idx] = { ...next[idx], solo: !next[idx].solo };
+      return next;
+    });
+  }, []);
+
+  const resetDecks = useCallback(() => {
+    setDecks([0, 1, 2, 3].map((i) => defaultDeckState(i)));
+  }, []);
+
   const value: LiveModeContextValue = {
     isLiveMode, setIsLiveMode,
     isPlaying, setIsPlaying,
@@ -654,6 +705,7 @@ export function LiveModeProvider({
     scene, updateScene,
     sceneArmed, setSceneArmed,
     sceneCurrentSlot,
+    decks, updateDeck, toggleDeckMute, toggleDeckSolo, resetDecks,
   };
 
   return createElement(LiveModeContext.Provider, { value }, children);
