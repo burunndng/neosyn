@@ -4,11 +4,16 @@ import { ClockPanel } from "./ClockPanel";
 import { ProModeLayout } from "./ProModeLayout";
 import { DJModeLayout } from "./DJModeLayout";
 import { HelpCircle } from "lucide-react";
+import { HelpOverlay } from "./HelpOverlay";
 
 const ACCENT = "hsl(192,87%,53%)";
 
 export function LiveModeLayout() {
-  const { tapTempo, setIsPlaying, isPlaying, snapshots, recallSnapshot, morphTime, morphMode, setMorphMode, uiMode, setUiMode } = useLiveMode();
+  const {
+    tapTempo, setIsPlaying, isPlaying, snapshots, recallSnapshot,
+    morphTime, morphMode, setMorphMode, uiMode, setUiMode,
+    toggleDeckMute, toggleDeckSolo,
+  } = useLiveMode();
   const [showHelp, setShowHelp] = useState(false);
 
   // Keyboard shortcuts
@@ -62,6 +67,21 @@ export function LiveModeLayout() {
         case "]":
           // Previous/next snapshot — not implemented yet
           break;
+        case "z":
+        case "Z":
+        case "x":
+        case "X":
+        case "c":
+        case "C":
+        case "v":
+        case "V": {
+          e.preventDefault();
+          const idx = ({ z: 0, x: 1, c: 2, v: 3 } as Record<string, number>)[e.key.toLowerCase()];
+          if (idx === undefined) break;
+          if (e.shiftKey) toggleDeckSolo(idx);
+          else toggleDeckMute(idx);
+          break;
+        }
         default:
           break;
       }
@@ -69,7 +89,7 @@ export function LiveModeLayout() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isPlaying, setIsPlaying, tapTempo, snapshots, recallSnapshot, morphMode, setMorphMode, morphTime, showHelp]);
+  }, [isPlaying, setIsPlaying, tapTempo, snapshots, recallSnapshot, morphMode, setMorphMode, morphTime, showHelp, toggleDeckMute, toggleDeckSolo]);
 
   return (
     <div
@@ -145,82 +165,7 @@ export function LiveModeLayout() {
       )}
 
       {/* Help overlay */}
-      {showHelp && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.9)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-          }}
-          onClick={() => setShowHelp(false)}
-        >
-          <div
-            style={{
-              background: "#0e1016",
-              border: `1px solid ${ACCENT}`,
-              borderRadius: 6,
-              padding: 20,
-              maxWidth: 500,
-              maxHeight: "80vh",
-              overflowY: "auto",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 style={{ color: ACCENT, fontSize: 16, fontWeight: 700, marginBottom: 16 }}>KEYBOARD SHORTCUTS</h2>
-            <div className="flex flex-col gap-2" style={{ fontSize: 11, color: "rgba(255,255,255,0.7)" }}>
-              <div style={{ display: "flex", gap: 16 }}>
-                <div style={{ fontWeight: 600, minWidth: 60 }}>Space</div>
-                <div>Play / Stop</div>
-              </div>
-              <div style={{ display: "flex", gap: 16 }}>
-                <div style={{ fontWeight: 600, minWidth: 60 }}>T</div>
-                <div>Tap Tempo</div>
-              </div>
-              <div style={{ display: "flex", gap: 16 }}>
-                <div style={{ fontWeight: 600, minWidth: 60 }}>1–8</div>
-                <div>Recall Snapshot 1–8</div>
-              </div>
-              <div style={{ display: "flex", gap: 16 }}>
-                <div style={{ fontWeight: 600, minWidth: 60 }}>M</div>
-                <div>Toggle Morph mode</div>
-              </div>
-              <div style={{ display: "flex", gap: 16 }}>
-                <div style={{ fontWeight: 600, minWidth: 60 }}>?</div>
-                <div>Toggle this help</div>
-              </div>
-              <hr style={{ opacity: 0.2, margin: "12px 0" }} />
-              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.5)" }}>
-                <p>Right-click snapshot slots to save.</p>
-                <p>Right-click a sequencer step to edit its probability.</p>
-                <p>Drag knobs up/down to adjust values.</p>
-                <p>Modulation matrix runs at 50 Hz control rate.</p>
-                <p>Arm SCENE to auto-cycle through 4 snapshot slots on a bar counter.</p>
-              </div>
-            </div>
-            <button
-              onClick={() => setShowHelp(false)}
-              style={{
-                marginTop: 20,
-                width: "100%",
-                padding: "6px 12px",
-                borderRadius: 3,
-                background: ACCENT,
-                color: "#000",
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: "pointer",
-                fontFamily: "'JetBrains Mono', monospace",
-              }}
-            >
-              CLOSE
-            </button>
-          </div>
-        </div>
-      )}
+      {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
 
       {/* Help button (bottom-right) */}
       <button

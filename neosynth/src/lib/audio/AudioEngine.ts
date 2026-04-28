@@ -1,6 +1,10 @@
 import type { FXRack } from "./FXRack";
 import { masterClock } from "./MasterClock";
 import type { ClockDivision } from "./MasterClock";
+import { SampleDeck, newDeckChunkState } from "./SampleDeck";
+import type { DeckState } from "./SampleDeck";
+
+const NUM_DECKS = 4;
 
 export type BilateralPattern =
   | "pure-alternation"
@@ -637,6 +641,13 @@ export class AudioEngine {
   private analyserNode: AnalyserNode | null = null;
   private modOverrides: Partial<SynthParams> = {};
 
+  // Sample decks (independent of A/B layers — for complementary rhythmic samples)
+  private decks: (SampleDeck | null)[] = Array(NUM_DECKS).fill(null);
+  private deckStates: DeckState[] = [];
+  private deckBuffers: Map<string, AudioBuffer> = new Map();
+  private deckScheduleStates: { nextTime: number }[] = [];
+  private deckBus: GainNode | null = null;
+
   updateParams(newParams: SynthParams) {
     const prev = this.params;
     this.params = { ...newParams };
@@ -814,6 +825,13 @@ export class AudioEngine {
     this.scheduleEnd = startOffset;
     this.scheduleStateA = { nextLeft: startOffset, nextRight: startOffset, side: "left", rollPhase: 0, pulseIdx: 0 };
     this.scheduleStateB = { nextLeft: startOffset, nextRight: startOffset, side: "left", rollPhase: 0, pulseIdx: 0 };
+
+    // Build decks (their dry outputs join deckBus → masterFX input)
+    this.buildDecks();
+    this.resetDeckScheduleStates(startOffset);
+    // Kick off async buffer loads — pulses play silently until buffers arrive.
+    void this.ensureDeckBuffers();
+
     this.runScheduler();
   }
 
@@ -825,6 +843,7 @@ export class AudioEngine {
       clearInterval(this.scheduleInterval);
       this.scheduleInterval = null;
     }
+    this.teardownDecks();
     if (this.graph) {
       teardownGraph(this.graph);
       this.graph = null;
@@ -897,6 +916,15 @@ export class AudioEngine {
             rollPhase: resultB.rollPhase,
             pulseIdx: resultB.pulseIdx,
           };
+        }
+
+        // Sample decks: each schedules independently using its own division.
+        const bpmNow = masterClock.bpm;
+        for (let i = 0; i < NUM_DECKS; i++) {
+          const deck = this.decks[i];
+          if (!deck) continue;
+          const prev = this.deckScheduleStates[i] ?? { nextTime: this.scheduleEnd };
+          this.deckScheduleStates[i] = deck.scheduleChunk(this.scheduleEnd, CHUNK_DURATION, prev, bpmNow);
         }
 
         this.scheduleEnd = resultA.endTime;
@@ -1003,6 +1031,23 @@ export class AudioEngine {
         if (this.streamDest) this.graph.masterGain.connect(this.streamDest);
       }
     }
+    // Re-route deck bus + sends to follow the new rack (or fall through to master).
+    if (this.deckBus && this.graph) {
+      try { this.deckBus.disconnect(); } catch { /* noop */ }
+      const target: AudioNode = rack ? rack.input : this.graph.masterGain;
+      this.deckBus.connect(target);
+      for (let i = 0; i < NUM_DECKS; i++) {
+        const d = this.decks[i];
+        if (!d) continue;
+        try { d.delaySendOut.disconnect(); } catch { /* noop */ }
+        try { d.reverbSendOut.disconnect(); } catch { /* noop */ }
+        if (rack) {
+          d.delaySendOut.connect(rack.delayNode);
+          d.reverbSendOut.connect(rack.convolver);
+        }
+        // If no rack, sends are dangling — silent — by design.
+      }
+    }
     this.fxRack = rack;
   }
 
@@ -1038,6 +1083,119 @@ export class AudioEngine {
     const t = this.ctx?.currentTime ?? 0;
     this.graph.masterGain.gain.setTargetAtTime(Math.max(0, Math.min(1, volume)), t, 0.01);
   }
+
+  // ─── Sample Decks API ───────────────────────────────────────────────────────
+
+  /** Replace deck state. If audio context exists, applies live. */
+  setDeckStates(states: DeckState[]) {
+    this.deckStates = states.map((s) => ({ ...s }));
+    if (!this.ctx) return;
+    const anySolo = this.deckStates.some((s) => s.solo);
+    for (let i = 0; i < NUM_DECKS; i++) {
+      const deck = this.decks[i];
+      const state = this.deckStates[i];
+      if (deck && state) deck.applyState(state, anySolo);
+    }
+    // Load any newly-referenced sample buffers asynchronously.
+    void this.ensureDeckBuffers();
+  }
+
+  /** Fetch + decode any sample buffers referenced by deck states. */
+  private async ensureDeckBuffers(): Promise<void> {
+    if (!this.ctx) return;
+    for (let i = 0; i < NUM_DECKS; i++) {
+      const state = this.deckStates[i];
+      if (!state || !state.sampleSlug) continue;
+      const url = await this.resolveDeckSampleUrl(state.sampleSlug);
+      if (!url) continue;
+      if (!this.deckBuffers.has(url)) {
+        try {
+          const resp = await fetch(url);
+          const ab = await resp.arrayBuffer();
+          const buf = await this.ctx.decodeAudioData(ab);
+          this.deckBuffers.set(url, buf);
+        } catch (e) {
+          console.warn(`[AudioEngine] Failed to load deck sample ${url}:`, e);
+          continue;
+        }
+      }
+      const deck = this.decks[i];
+      if (deck) deck.setBuffer(this.deckBuffers.get(url) ?? null);
+    }
+  }
+
+  /** Resolve a slug to a /sounds/* path via dynamic import of params. */
+  private async resolveDeckSampleUrl(slug: string): Promise<string | null> {
+    // Avoid pulling params.ts into AudioEngine's import graph at module-init —
+    // we do a lazy dynamic import the first time decks are used.
+    try {
+      const { samplePathBySlug } = await import("../stores/params");
+      return samplePathBySlug(slug) ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private buildDecks() {
+    if (!this.ctx || !this.graph) return;
+    const ctx = this.ctx;
+
+    // Tear down any pre-existing decks first.
+    this.teardownDecks();
+
+    // Bus that sums all deck dry outputs and feeds the FX rack input
+    // (or directly destination if no FX rack present).
+    this.deckBus = ctx.createGain();
+    this.deckBus.gain.value = 1;
+
+    const fxInput: AudioNode = this.fxRack ? this.fxRack.input : this.graph.masterGain;
+    this.deckBus.connect(fxInput);
+
+    const anySolo = this.deckStates.some((s) => s.solo);
+    for (let i = 0; i < NUM_DECKS; i++) {
+      const state = this.deckStates[i];
+      if (!state) continue;
+      const deck = new SampleDeck(ctx, i, state);
+      this.decks[i] = deck;
+      // Dry → deckBus → master FX
+      deck.dryOut.connect(this.deckBus);
+      // Sends → master FX delay tank / reverb tank (parallel to master sends)
+      if (this.fxRack) {
+        deck.delaySendOut.connect(this.fxRack.delayNode);
+        deck.reverbSendOut.connect(this.fxRack.convolver);
+      }
+      deck.applyState(state, anySolo);
+    }
+  }
+
+  private teardownDecks() {
+    for (let i = 0; i < NUM_DECKS; i++) {
+      const d = this.decks[i];
+      if (d) {
+        try { d.destroy(); } catch { /* noop */ }
+        this.decks[i] = null;
+      }
+    }
+    if (this.deckBus) {
+      try { this.deckBus.disconnect(); } catch { /* noop */ }
+      this.deckBus = null;
+    }
+  }
+
+  private resetDeckScheduleStates(startTime: number) {
+    this.deckScheduleStates = [];
+    for (let i = 0; i < NUM_DECKS; i++) {
+      const s = this.deckStates[i];
+      if (!s) {
+        this.deckScheduleStates[i] = { nextTime: startTime };
+        continue;
+      }
+      this.deckScheduleStates[i] = newDeckChunkState(startTime, s.division, masterClock.bpm);
+    }
+  }
+
+  /** Number of decks (constant). */
+  getDeckCount(): number { return NUM_DECKS; }
 }
 
 export const audioEngine = new AudioEngine();

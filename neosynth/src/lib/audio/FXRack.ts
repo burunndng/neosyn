@@ -159,12 +159,12 @@ export class FXRack {
   private readonly preOut: GainNode;
 
   // Delay
-  private readonly delayNode: DelayNode;
+  readonly delayNode: DelayNode;
   private readonly delayFbGain: GainNode;
   readonly delayWetGain: GainNode;
 
   // Reverb
-  private readonly convolver: ConvolverNode;
+  readonly convolver: ConvolverNode;
   readonly reverbWetGain: GainNode;
 
   // Performance bus effects
