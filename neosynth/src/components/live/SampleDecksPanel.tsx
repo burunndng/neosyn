@@ -185,6 +185,7 @@ function DeckCard({ idx, deck }: { idx: number; deck: DeckState }) {
           value={deck.gain} min={0} max={1.5} defaultValue={0.8}
           size={40} label="GAIN" valueLabel={deck.gain.toFixed(2)}
           color={tintRgb}
+          paramKey={`deck.${idx}.gain`}
           onChange={(v) => updateDeck(idx, { gain: v })}
         />
         <Knob
@@ -192,18 +193,21 @@ function DeckCard({ idx, deck }: { idx: number; deck: DeckState }) {
           size={40} label="PAN"
           valueLabel={deck.pan === 0 ? "C" : deck.pan < 0 ? `L${Math.round(-deck.pan * 100)}` : `R${Math.round(deck.pan * 100)}`}
           color={tintRgb}
+          paramKey={`deck.${idx}.pan`}
           onChange={(v) => updateDeck(idx, { pan: v })}
         />
         <Knob
           value={deck.pitch} min={-24} max={24} defaultValue={0}
           size={40} label="PITCH" valueLabel={`${deck.pitch > 0 ? "+" : ""}${deck.pitch.toFixed(0)}st`}
           color={tintRgb}
+          paramKey={`deck.${idx}.pitch`}
           onChange={(v) => updateDeck(idx, { pitch: Math.round(v) })}
         />
         <Knob
           value={deck.probability} min={0} max={1} defaultValue={1}
           size={40} label="PROB" valueLabel={`${Math.round(deck.probability * 100)}%`}
           color={tintRgb}
+          paramKey={`deck.${idx}.probability`}
           onChange={(v) => updateDeck(idx, { probability: v })}
         />
       </div>
@@ -214,24 +218,28 @@ function DeckCard({ idx, deck }: { idx: number; deck: DeckState }) {
           value={deck.hpfFreq} min={20} max={8000} defaultValue={20}
           size={40} label="HPF" valueLabel={deck.hpfFreq < 100 ? `${deck.hpfFreq.toFixed(0)}` : `${(deck.hpfFreq / 1000).toFixed(1)}k`}
           color={tintRgb}
+          paramKey={`deck.${idx}.hpf`}
           onChange={(v) => updateDeck(idx, { hpfFreq: v })}
         />
         <Knob
           value={deck.lpfFreq} min={200} max={20000} defaultValue={20000}
           size={40} label="LPF" valueLabel={deck.lpfFreq < 1000 ? `${deck.lpfFreq.toFixed(0)}` : `${(deck.lpfFreq / 1000).toFixed(1)}k`}
           color={tintRgb}
+          paramKey={`deck.${idx}.lpf`}
           onChange={(v) => updateDeck(idx, { lpfFreq: v })}
         />
         <Knob
           value={deck.drive} min={0} max={1} defaultValue={0}
           size={40} label="DRIVE" valueLabel={deck.drive.toFixed(2)}
           color={tintRgb}
+          paramKey={`deck.${idx}.drive`}
           onChange={(v) => updateDeck(idx, { drive: v })}
         />
         <Knob
           value={deck.swing} min={0} max={0.5} defaultValue={0}
           size={40} label="SWING" valueLabel={`${Math.round(deck.swing * 100)}%`}
           color={tintRgb}
+          paramKey={`deck.${idx}.swing`}
           onChange={(v) => updateDeck(idx, { swing: v })}
         />
       </div>
@@ -242,12 +250,14 @@ function DeckCard({ idx, deck }: { idx: number; deck: DeckState }) {
           value={deck.delaySend} min={0} max={1} defaultValue={0}
           size={40} label="DLY ➜" valueLabel={`${Math.round(deck.delaySend * 100)}%`}
           color={tintRgb}
+          paramKey={`deck.${idx}.delaySend`}
           onChange={(v) => updateDeck(idx, { delaySend: v })}
         />
         <Knob
           value={deck.reverbSend} min={0} max={1} defaultValue={0}
           size={40} label="REV ➜" valueLabel={`${Math.round(deck.reverbSend * 100)}%`}
           color={tintRgb}
+          paramKey={`deck.${idx}.reverbSend`}
           onChange={(v) => updateDeck(idx, { reverbSend: v })}
         />
         <button

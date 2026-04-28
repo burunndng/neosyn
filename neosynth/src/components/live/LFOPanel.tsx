@@ -32,6 +32,8 @@ interface LFOUnitProps {
 
 function LFOUnit({ state, phaseFn, update, label }: LFOUnitProps) {
   const phaseMeterRef = useRef<SVGCircleElement>(null);
+  // "LFO 1" → "lfo.1", "LFO 2" → "lfo.2" — used as MIDI learn paramKey prefix.
+  const keyPrefix = `lfo.${label.replace(/\D+/g, "")}`;
 
   useEffect(() => {
     let raf: number;
@@ -106,6 +108,7 @@ function LFOUnit({ state, phaseFn, update, label }: LFOUnitProps) {
               value={state.rateHz} min={0.01} max={20}
               size={44} label="RATE"
               valueLabel={`${state.rateHz.toFixed(2)}Hz`}
+              paramKey={`${keyPrefix}.rate`}
               onChange={(v) => update({ rateHz: v })}
             />
           ) : (
@@ -121,6 +124,7 @@ function LFOUnit({ state, phaseFn, update, label }: LFOUnitProps) {
           value={state.depth} min={0} max={1}
           size={44} label="DEPTH"
           valueLabel={state.depth.toFixed(2)}
+          paramKey={`${keyPrefix}.depth`}
           onChange={(v) => update({ depth: v })}
         />
       </div>

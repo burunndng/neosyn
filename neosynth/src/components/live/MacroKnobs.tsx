@@ -84,6 +84,7 @@ export function MacroKnobs() {
                 max={1}
                 size={64}
                 valueLabel={m.value.toFixed(2)}
+                paramKey={`macro.${idx}`}
                 onChange={(v) => setMacroValue(idx, v)}
               />
               <button

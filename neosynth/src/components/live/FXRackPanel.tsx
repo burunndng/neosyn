@@ -107,6 +107,7 @@ export function FXRackPanel() {
             max={1}
             size={44}
             valueLabel={`${Math.round(fx.driveAmount * 100)}%`}
+            paramKey="fx.driveAmount"
             onChange={(v) => updateFx({ driveAmount: v })}
           />
         </FxModule>
@@ -123,6 +124,7 @@ export function FXRackPanel() {
             max={2000}
             size={44}
             valueLabel={`${fx.hpfFreq.toFixed(0)}Hz`}
+            paramKey="fx.hpfFreq"
             onChange={(v) => updateFx({ hpfFreq: v })}
           />
         </FxModule>
@@ -139,6 +141,7 @@ export function FXRackPanel() {
             max={20000}
             size={44}
             valueLabel={`${fx.lpfFreq.toFixed(0)}Hz`}
+            paramKey="fx.lpfFreq"
             onChange={(v) => updateFx({ lpfFreq: v })}
           />
         </FxModule>
@@ -155,6 +158,7 @@ export function FXRackPanel() {
             max={12}
             size={44}
             valueLabel={`${fx.crushBits.toFixed(1)} bit`}
+            paramKey="fx.crushBits"
             onChange={(v) => updateFx({ crushBits: v })}
           />
         </FxModule>
@@ -175,6 +179,7 @@ export function FXRackPanel() {
                 ? "mono"
                 : `${(fx.widthAmount * 100).toFixed(0)}%`
             }
+            paramKey="fx.widthAmount"
             onChange={(v) => updateFx({ widthAmount: v })}
           />
         </FxModule>
@@ -195,6 +200,7 @@ export function FXRackPanel() {
               size={40}
               label="DEPTH"
               valueLabel={fx.gateDepth.toFixed(2)}
+              paramKey="fx.gateDepth"
               onChange={(v) => updateFx({ gateDepth: v })}
             />
           </div>
@@ -220,6 +226,7 @@ export function FXRackPanel() {
               size={40}
               label="DEPTH"
               valueLabel={fx.pumpDepth.toFixed(2)}
+              paramKey="fx.pumpDepth"
               onChange={(v) => updateFx({ pumpDepth: v })}
             />
           </div>
@@ -245,6 +252,7 @@ export function FXRackPanel() {
               size={40}
               label="TIME"
               valueLabel={`${fx.delayTime.toFixed(2)}s`}
+              paramKey="fx.delayTime"
               onChange={(v) => updateFx({ delayTime: v })}
             />
             <Knob
@@ -254,6 +262,7 @@ export function FXRackPanel() {
               size={40}
               label="FB"
               valueLabel={fx.delayFeedback.toFixed(2)}
+              paramKey="fx.delayFeedback"
               onChange={(v) => updateFx({ delayFeedback: v })}
             />
             <Knob
@@ -263,6 +272,7 @@ export function FXRackPanel() {
               size={40}
               label="WET"
               valueLabel={fx.delayWet.toFixed(2)}
+              paramKey="fx.delayWet"
               onChange={(v) => updateFx({ delayWet: v })}
             />
           </div>
@@ -312,6 +322,7 @@ export function FXRackPanel() {
               size={40}
               label="WET"
               valueLabel={fx.reverbWet.toFixed(2)}
+              paramKey="fx.reverbWet"
               onChange={(v) => updateFx({ reverbWet: v })}
             />
             <Knob
@@ -321,6 +332,7 @@ export function FXRackPanel() {
               size={40}
               label="SIZE"
               valueLabel={`${fx.reverbSize.toFixed(1)}s`}
+              paramKey="fx.reverbSize"
               onChange={(v) => updateFx({ reverbSize: v })}
             />
           </div>
@@ -341,6 +353,7 @@ export function FXRackPanel() {
               size={40}
               label="VOL"
               valueLabel={`${(fx.masterGain * 100).toFixed(0)}`}
+              paramKey="fx.masterGain"
               onChange={(v) => updateFx({ masterGain: v })}
             />
           </div>
@@ -364,6 +377,7 @@ export function FXRackPanel() {
               size={40}
               label="DEPTH"
               valueLabel={params.sidechainDepth.toFixed(2)}
+              paramKey="fx.sidechainDepth"
               onChange={(v) => updateParam("sidechainDepth", v)}
             />
             <Knob
@@ -373,6 +387,7 @@ export function FXRackPanel() {
               size={40}
               label="DUR"
               valueLabel={`${(params.sidechainDuration * 1000).toFixed(0)}ms`}
+              paramKey="fx.sidechainDur"
               onChange={(v) => updateParam("sidechainDuration", v)}
             />
           </div>

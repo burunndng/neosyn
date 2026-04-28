@@ -18,6 +18,7 @@ import { audioEngine } from "../audio/AudioEngine";
 import type { SynthParams } from "../audio/AudioEngine";
 import { defaultDeckState } from "../audio/SampleDeck";
 import type { DeckState } from "../audio/SampleDeck";
+import { midiLearn } from "../audio/MidiLearn";
 import { downloadBlob } from "../utils/wavExport";
 import { loadPersisted, savePersistedDebounced } from "../utils/persist";
 
@@ -193,6 +194,15 @@ export interface LiveModeContextValue {
   toggleDeckMute: (idx: number) => void;
   toggleDeckSolo: (idx: number) => void;
   resetDecks: () => void;
+
+  // MIDI learn
+  midiLearnEnabled: boolean;
+  setMidiLearnEnabled: (v: boolean) => void;
+  midiLearnTarget: string | null;
+  setMidiLearnTarget: (paramKey: string | null) => void;
+  midiBindingsTick: number;   // bumps whenever bindings change so UI re-renders
+  midiOpen: boolean;
+  setMidiOpen: (v: boolean) => void;
 }
 
 const LiveModeContext = createContext<LiveModeContextValue | null>(null);
@@ -262,6 +272,20 @@ export function LiveModeProvider({
       [0, 1, 2, 3].map((i) => defaultDeckState(i)),
     ),
   );
+  const [midiLearnEnabled, setMidiLearnEnabledState] = useState(false);
+  const [midiLearnTarget, setMidiLearnTargetState] = useState<string | null>(null);
+  const [midiBindingsTick, setMidiBindingsTick] = useState(0);
+  const [midiOpen, setMidiOpen] = useState(false);
+
+  // Re-render whenever MidiLearn singleton notifies (binding added/removed,
+  // device connected, learn target changed). Single subscription per provider.
+  useEffect(() => {
+    const unsub = midiLearn.subscribe(() => {
+      setMidiBindingsTick((t) => t + 1);
+      setMidiLearnTargetState(midiLearn.getLearnTarget());
+    });
+    return unsub;
+  }, []);
 
   useEffect(() => { savePersistedDebounced("bpm", bpm); }, [bpm]);
   useEffect(() => { savePersistedDebounced("lfo1", lfo1); }, [lfo1]);
@@ -685,6 +709,16 @@ export function LiveModeProvider({
     setDecks([0, 1, 2, 3].map((i) => defaultDeckState(i)));
   }, []);
 
+  const setMidiLearnEnabled = useCallback((v: boolean) => {
+    setMidiLearnEnabledState(v);
+    if (v) void midiLearn.ensureAccess();
+    else midiLearn.setLearnTarget(null);   // exit any pending arm
+  }, []);
+
+  const setMidiLearnTarget = useCallback((paramKey: string | null) => {
+    midiLearn.setLearnTarget(paramKey);
+  }, []);
+
   const value: LiveModeContextValue = {
     isLiveMode, setIsLiveMode,
     isPlaying, setIsPlaying,
@@ -706,6 +740,10 @@ export function LiveModeProvider({
     sceneArmed, setSceneArmed,
     sceneCurrentSlot,
     decks, updateDeck, toggleDeckMute, toggleDeckSolo, resetDecks,
+    midiLearnEnabled, setMidiLearnEnabled,
+    midiLearnTarget, setMidiLearnTarget,
+    midiBindingsTick,
+    midiOpen, setMidiOpen,
   };
 
   return createElement(LiveModeContext.Provider, { value }, children);

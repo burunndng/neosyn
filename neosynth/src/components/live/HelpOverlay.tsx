@@ -132,6 +132,24 @@ const SECTIONS: Section[] = [
     ],
   },
   {
+    title: "MIDI LEARN  (hardware controllers)",
+    rows: [
+      { key: "MIDI btn",  desc: "Open the MIDI Learn panel (bottom-right floating icon)" },
+      { key: "START",     desc: "Toggle Learn Mode on — knobs glow yellow and become arm-clickable" },
+      { key: "click knob", desc: "Arm that knob — pulses bright yellow, waits for hardware input" },
+      { key: "twist HW",   desc: "Move any knob/fader on your MIDI controller — captures CC and binds" },
+      { key: "STOP",       desc: "Toggle Learn Mode off — bindings stay active, knobs respond to MIDI" },
+    ],
+    notes: [
+      "Requires Chrome or Edge (Web MIDI API). Firefox/Safari are not supported.",
+      "Bound knobs show a small \"M\" badge in the corner. Hover to see channel + CC.",
+      "Bindings persist across sessions in localStorage.",
+      "Open the MIDI panel anytime to see all current bindings, view connected devices, or remove individual bindings (trash icon).",
+      "MIDI CC values 0–127 map linearly to each knob's full range.",
+      "Same hardware control on the same device can only bind one parameter — re-binding replaces.",
+    ],
+  },
+  {
     title: "GENERAL",
     rows: [
       { key: "?",          desc: "Toggle this help overlay" },

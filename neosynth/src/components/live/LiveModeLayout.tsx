@@ -3,8 +3,9 @@ import { useLiveMode } from "@/lib/stores/liveMode";
 import { ClockPanel } from "./ClockPanel";
 import { ProModeLayout } from "./ProModeLayout";
 import { DJModeLayout } from "./DJModeLayout";
-import { HelpCircle } from "lucide-react";
+import { HelpCircle, Music4 } from "lucide-react";
 import { HelpOverlay } from "./HelpOverlay";
+import { MidiLearnPanel } from "./MidiLearnPanel";
 
 const ACCENT = "hsl(192,87%,53%)";
 
@@ -13,6 +14,7 @@ export function LiveModeLayout() {
     tapTempo, setIsPlaying, isPlaying, snapshots, recallSnapshot,
     morphTime, morphMode, setMorphMode, uiMode, setUiMode,
     toggleDeckMute, toggleDeckSolo,
+    midiOpen, setMidiOpen, midiLearnEnabled,
   } = useLiveMode();
   const [showHelp, setShowHelp] = useState(false);
 
@@ -167,29 +169,50 @@ export function LiveModeLayout() {
       {/* Help overlay */}
       {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
 
-      {/* Help button (bottom-right) */}
-      <button
-        onClick={() => setShowHelp(!showHelp)}
+      {/* MIDI Learn overlay */}
+      {midiOpen && <MidiLearnPanel onClose={() => setMidiOpen(false)} />}
+
+      {/* Floating bottom-right action buttons */}
+      <div
         style={{
-          position: "fixed",
-          bottom: 20,
-          right: 20,
-          width: 40,
-          height: 40,
-          borderRadius: "50%",
-          background: "rgba(34,211,238,0.12)",
-          border: `1px solid ${ACCENT}`,
-          color: ACCENT,
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
+          position: "fixed", bottom: 20, right: 20,
+          display: "flex", flexDirection: "column", gap: 10,
           zIndex: 100,
         }}
-        title="Help (? key)"
       >
-        <HelpCircle size={18} />
-      </button>
+        {/* MIDI button */}
+        <button
+          onClick={() => setMidiOpen(!midiOpen)}
+          style={{
+            width: 40, height: 40, borderRadius: "50%",
+            background: midiLearnEnabled ? "rgba(250,204,21,0.18)" : "rgba(34,211,238,0.12)",
+            border: `1px solid ${midiLearnEnabled ? "#facc15" : ACCENT}`,
+            color: midiLearnEnabled ? "#facc15" : ACCENT,
+            cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: midiLearnEnabled ? "0 0 12px rgba(250,204,21,0.4)" : "none",
+            transition: "all 0.15s",
+          }}
+          title={midiLearnEnabled ? "MIDI Learn (active)" : "MIDI Learn"}
+        >
+          <Music4 size={18} />
+        </button>
+
+        {/* Help button */}
+        <button
+          onClick={() => setShowHelp(!showHelp)}
+          style={{
+            width: 40, height: 40, borderRadius: "50%",
+            background: "rgba(34,211,238,0.12)",
+            border: `1px solid ${ACCENT}`,
+            color: ACCENT, cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+          title="Help (? key)"
+        >
+          <HelpCircle size={18} />
+        </button>
+      </div>
     </div>
   );
 }
